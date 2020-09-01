@@ -1,0 +1,413 @@
+---
+title: "PM 591 -- Machine Learning for the Health Sciences."
+author: "Assignment 6"
+date: "Due 4/25/2019"
+output:
+  html_document: default
+---
+
+NOTE: Exercise 2 and the boosting component of Exercise 1 are optional
+<br>
+
+### Exercise 1 -- Analysis
+Compare the performance of classification trees, bagging, random forests, and boosting for predicting heart disease based on the ``heart`` data.
+
+i. Split the data into training and testing. Train each of the models on the training data and extract the cross-validation (or out-of-bag error for bagging and Random forest). 
+
+   a. For bagging use ``randomForest`` with ``mtry`` equal to the number of features (all other parameters at their default values). Generate the variable importance plot using ``varImpPlot`` and extract variable importance from the ``randomForest`` fitted object using the ``importance`` function.
+   
+   b.  For random forests use ``randomForest`` with the default parameters. Generate the variable importance plot using ``varImpPlot`` and extract variable importance from the ``randomForest`` fitted object using the ``importance`` function. 
+   
+   c. For boosting use `gbm` with ``cv.folds=5`` to perform 5-fold cross-validation, and set ``class.stratify.cv`` to ``AHD`` (heart disease outcome) so that cross-validation is performed stratifying by ``AHD``.  Plot the cross-validation error as a function of the boosting iteration/trees (the `$cv.error` component of the object returned by ``gbm``) and determine whether additional boosting iterations are warranted. If so, run additional iterations with  ``gbm.more`` (use the R help to check its sintax). Choose the optimal number of iterations. Use the ``summary.gbm`` funtion to generate the variable importance plot and extract variable importance/influence (``summary.gbm`` does both). Generate 1D and 2D marginal plots with ``gbm.plot`` to assess the effect of the top three variables and their 2-way interactions. 
+
+```{r}
+library(rpart)
+library(randomForest)
+library(mlr)
+library(gbm)
+
+heart <- read.csv('D:/study/MasterinUSC/PM591/week10/homework/Heart.csv')
+heart <- heart[complete.cases(heart),]
+str(heart)
+
+
+heart_tsk <- makeClassifTask(id = "Heart", data = heart, target = "AHD")
+split_desc <- makeResampleDesc(method = 'Holdout', stratify = T, split = 0.7)
+
+set.seed(20190417)
+split <- makeResampleInstance(split_desc, task = heart_tsk)
+heart_train <- split$train.inds[[1]]
+heart_test <- split$test.inds[[1]]
+p <- ncol(heart) - 1
+
+table(heart$AHD[heart_train])
+
+# Classification tree
+heart_tree_train <- rpart(AHD ~ ., data = heart[heart_train,], method = "class", control = list(minsplit = 10, minbucket = 2, cp = 0, xval = 10))
+plotcp(heart_tree_train)
+printcp(heart_tree_train)
+heart_tree_cverror <- min(heart_tree_train$cptable[,4])
+
+# Bagging
+heart_bagging_train <- randomForest(AHD ~ ., data = heart[heart_train,], mtry = p, ntree = 500, strata = heart$AHD[heart_train,], samplesize = as.vector(table(heart$AHD[heart_train,])))
+varImpPlot(heart_bagging_train, cex.lab = 1.5, cex.axis = 2, cex = 1.3, n.var = p, main="Bagging", pch=16, col='red4')
+importance(heart_bagging_train)
+heart_bagging_train
+
+# RandomForest
+heart_RF_train <- randomForest(AHD ~ ., data = heart[heart_train,], mtry = sqrt(p), ntree = 500, strata = heart$AHD[heart_train,], samplesize = as.vector(table(heart$AHD[heart_train,])))
+varImpPlot(heart_RF_train, cex.lab = 1.5, cex.axis = 2, cex = 1.3, n.var = p, main="Random Forest", pch=16, col='red4')
+importance(heart_RF_train)
+heart_RF_train
+
+# Boosting
+heart_boost_train <- gbm(AHD ~ ., data = heart[heart_train,], distribution = 'multinomial', n.trees = 10000, interaction.depth = 1, shrinkage = 0.001, cv.folds = 5, class.stratify.cv = T)
+gbm.perf(heart_boost_train)
+heart_boost_train
+## More iterations are not warranted, the best iteration number is 3273.
+
+summary.gbm(heart_boost_train)
+# ChestPain
+# Ca
+# Thal
+pl_heart <- plot(heart_boost_train, i.var='ChestPain', type='response', return.grid = T)
+plot(x = pl_heart[,1], y = pl_heart[,2][,2], type ='l', lwd=3, col='red4', xlab = "ILMN_1780188", ylab = "y")
+```
+   
+   
+ii. Compute the test misclassification error for the 4 methods and comment on their relative performance.
+
+```{r}
+# Classification tree
+heart_tree <- rpart(AHD ~ ., data = heart[heart_train,], method = "class", control = list(minsplit = 10, minbucket = 2, cp = 0.026))
+heart_tree_predicttest <- predict(heart_tree, newdata = heart[heart_test,], type = "class")
+heart_tree_testerror <- measureMMCE(truth = heart[heart_test,]$AHD, response = heart_tree_predicttest)
+
+# Bagging
+heart_bagging_predicttest <- predict(heart_bagging_train, newdata = heart[heart_test,], type = "class")
+heart_bagging_testerror <- measureMMCE(truth = heart[heart_test,]$AHD, response = heart_bagging_predicttest)
+
+# RandomForest
+heart_RF_predicttest <- predict(heart_RF_train, newdata = heart[heart_test,], type = "class")
+heart_RF_testerror <- measureMMCE(truth = heart[heart_test,]$AHD, response = heart_RF_predicttest)
+
+# Boosting
+heart_boost_predicttest <- matrix(predict(heart_boost_train, n.trees = 3273, newdata = heart[heart_test,], type = "response") > 0.5, ncol = 2)
+heart_boost_predicttest <- factor(heart_boost_predicttest[,1])
+levels(heart_boost_predicttest) <- c("Yes", "No")
+heart_boost_testerror <- measureMMCE(truth = heart[heart_test,]$AHD, response = heart_boost_predicttest)
+
+# Comparison
+MMCE_total <- c(heart_tree_testerror, heart_bagging_testerror, heart_RF_testerror, heart_boost_testerror)
+plot(MMCE_total, xlab = "Method", ylab = "MMCE", xaxt = "n", type = "b")
+axis(1, c(1:4), labels = c("Tree", "Bagging", "RF", "Boosting"))
+```
+
+From the performance plot, we find that classification tree has the largest MMCE of 25.6%, while bagging has less MMCE of 15.6%. Both Random forest and boosting give the smallest MMCE of 14.4%. In such case, RF and boosting are the best method to predict in this exercise.
+
+### Exercise 2 -- Analysis/conceptual 
+Yo will evaluate the effect of critical boosting parameters (number of boosting iterations, shrinkage/learning rate, and tree depth/interaction) on the Metabric data.  In ``gbm`` the number of iterations is controlled by ``n.trees`` (default is 100), the shrinkage/learning rate is controlled by ``shrinkage`` (default is 0.001), and interaction depth by ``interaction.depth`` (default is 1).
+
+i. Split the metabric data into training and testing.
+```{r}
+set.seed(20190419)
+load('D:/study/MasterinUSC/PM591/week9/metabric.Rdata')
+metabric <- metabric[complete.cases(metabric)]
+meta_tsk <- makeClassifTask(id = "Metabric", data = metabric, target = "y")
+split_desc <- makeResampleDesc(method = 'Holdout', stratify = T, split = 0.7)
+
+split <- makeResampleInstance(split_desc, task = meta_tsk)
+meta_train <- split$train.inds[[1]]
+meta_test <- split$test.inds[[1]]
+```
+
+ii. Set the seed and train a boosting classification with ``gbm`` using 10-fold cross-validation (``cv.folds=10``) on the training data with ``n.trees = 5,000``, ``shrinkage = 0.001``, and ``interaction.depth =1``. Plot the cross-validation errors as a function of the boosting iteration.
+```{r}
+set.seed(20190419)
+meta_boost_train <- gbm(y ~ ., data = metabric[meta_train,], distribution = 'multinomial', n.trees = 5000, interaction.depth = 1, shrinkage = 0.001, cv.folds = 10, class.stratify.cv = T)
+gbm.perf(meta_boost_train)
+summary.gbm(meta_boost_train)
+```
+
+iii. Repeat ii. using the same seed and ``n.trees=5,000`` with the following 3 additional combination of parameters: a) ``shrinkage = 0.001``, ``interaction.depth = 2``; b) ``shrinkage = 0.01``, ``interaction.depth = 1``; c) ``shrinkage = 0.01``, ``interaction.depth = 2``.
+
+```{r}
+set.seed(20190419)
+meta_boost_train_3a <- gbm(y ~ ., data = metabric[meta_train,], distribution = 'multinomial', n.trees = 5000, interaction.depth = 2, shrinkage = 0.001, cv.folds = 10, class.stratify.cv = T)
+gbm.perf(meta_boost_train_3a)
+summary.gbm(meta_boost_train_3a)
+
+meta_boost_train_3b <- gbm(y ~ ., data = metabric[meta_train,], distribution = 'multinomial', n.trees = 5000, interaction.depth = 1, shrinkage = 0.01, cv.folds = 10, class.stratify.cv = T)
+gbm.perf(meta_boost_train_3b)
+summary.gbm(meta_boost_train_3b)
+
+meta_boost_train_3c <- gbm(y ~ ., data = metabric[meta_train,], distribution = 'multinomial', n.trees = 5000, interaction.depth = 2, shrinkage = 0.01, cv.folds = 10, class.stratify.cv = T)
+gbm.perf(meta_boost_train_3c)
+summary.gbm(meta_boost_train_3c)
+```
+
+iii. Choose the best parameter combination among the ones examinded above to a) generate 1D and 2D marginal plots with ``gbm.plot`` to assess the effect of the top three variables and their 2-way interactions; b) compute the test msclassification error and AUC.
+
+```{r}
+library(pROC)
+
+par(mfrow = c(2,2))
+
+# a) 1D and 2D marginal plots
+pl2 <- plot(meta_boost_train, i.var = "ILMN_1780188" , type = "response", return.grid=TRUE)
+plot(x = pl2[,1], y = pl2[,2][,2], type ='l', lwd=3, col='red4', cex.axis=2, cex.lab=2, xlab = "ILMN_1780188", ylab = "y", main = c("shrink = 0.001", "depth = 1"))
+
+pl3a <- plot(meta_boost_train_3a, i.var = "ILMN_1780188", type = "response", return.grid=TRUE)
+plot(x = pl3a[,1], y = pl3a[,2][,2], type ='l', lwd=3, col='red4', cex.axis=2, cex.lab=2, xlab = "ILMN_1780188", ylab = "y", main = c("shrink = 0.001", "depth = 2"))
+
+pl3b <- plot(meta_boost_train_3b, i.var = "ILMN_1780188", type = "response", return.grid=TRUE)
+plot(x = pl3b[,1], y = pl3b[,2][,2], type ='l', lwd=3, col='red4', cex.axis=2, cex.lab=2, xlab = "ILMN_1780188", ylab = "y", main = c("shrink = 0.01", "depth = 1"))
+
+pl3c <- plot(meta_boost_train_3c, i.var = "ILMN_1780188", type = "response", return.grid=TRUE)
+plot(x = pl3c[,1], y = pl3c[,2][,2], type ='l', lwd=3, col='red4', cex.axis=2, cex.lab=2, xlab = "ILMN_1780188", ylab = "y", main = c("shrink = 0.01", "depth = 2"))
+
+# b) Test error and AUC
+## ii.
+meta_boost2_predicttest <- predict(meta_boost_train, n.trees =3212 , newdata = metabric[meta_test,], type = "response")
+
+meta_boost2_predicttest_response <- matrix(meta_boost2_predicttest > 0.5, ncol = 2)
+meta_boost2_predicttest_response <- factor(meta_boost2_predicttest_response[,1])
+levels(meta_boost2_predicttest_response) <- c("1", "0")
+meta_boost2_testerror <- measureMMCE(truth = metabric[meta_test,]$y, response = meta_boost2_predicttest_response)
+
+meta_boost2_auc_predict <- matrix(meta_boost2_predicttest, ncol = 2)
+roc_meta_boost2_test <- roc(metabric$y[meta_test], meta_boost2_auc_predict[,1])
+meta_boost2_auc <- auc(roc_meta_boost2_test)
+plot(roc_meta_boost2_test, main = paste("AUC = ", round(meta_boost2_auc,4)))
+
+## iiia.
+meta_boost3a_predicttest <- predict(meta_boost_train_3a, n.trees = 2303, newdata = metabric[meta_test,], type = "response")
+
+meta_boost3a_predicttest_response <- matrix(meta_boost3a_predicttest > 0.5, ncol = 2)
+meta_boost3a_predicttest_response <- factor(meta_boost3a_predicttest_response[,1])
+levels(meta_boost3a_predicttest_response) <- c("1", "0")
+meta_boost3a_testerror <- measureMMCE(truth = metabric[meta_test,]$y, response = meta_boost3a_predicttest_response)
+
+meta_boost3a_auc_predict <- matrix(meta_boost3a_predicttest, ncol = 2)
+roc_meta_boost3a_test <- roc(metabric$y[meta_test], meta_boost3a_auc_predict[,1])
+meta_boost3a_auc <- auc(roc_meta_boost2_test)
+plot(roc_meta_boost3a_test, main = paste("AUC = ", round(meta_boost3a_auc,4)))
+
+## iiib.
+meta_boost3b_predicttest <- predict(meta_boost_train_3b, n.trees = 304, newdata = metabric[meta_test,], type = "response")
+
+meta_boost3b_predicttest_response <- matrix(meta_boost3b_predicttest > 0.5, ncol = 2)
+meta_boost3b_predicttest_response <- factor(meta_boost3b_predicttest_response[,1])
+levels(meta_boost3b_predicttest_response) <- c("1", "0")
+meta_boost3b_testerror <- measureMMCE(truth = metabric[meta_test,]$y, response = meta_boost3b_predicttest_response)
+
+meta_boost3b_auc_predict <- matrix(meta_boost3b_predicttest, ncol = 2)
+roc_meta_boost3b_test <- roc(metabric$y[meta_test], meta_boost3b_auc_predict[,1])
+meta_boost3b_auc <- auc(roc_meta_boost3b_test)
+plot(roc_meta_boost3b_test, main = paste("AUC = ", round(meta_boost3b_auc,4)))
+
+## iiic.
+meta_boost3c_predicttest <- predict(meta_boost_train_3c, n.trees = 166, newdata = metabric[meta_test,], type = "response")
+
+meta_boost3c_predicttest_response <- matrix(meta_boost3c_predicttest > 0.5, ncol = 2)
+meta_boost3c_predicttest_response <- factor(meta_boost3c_predicttest_response[,1])
+levels(meta_boost3c_predicttest_response) <- c("1", "0")
+meta_boost3c_testerror <- measureMMCE(truth = metabric[meta_test,]$y, response = meta_boost3c_predicttest_response)
+
+meta_boost3c_auc_predict <- matrix(meta_boost3c_predicttest, ncol = 2)
+roc_meta_boost3c_test <- roc(metabric$y[meta_test], meta_boost3c_auc_predict[,1])
+meta_boost3c_auc <- auc(roc_meta_boost3c_test)
+plot(roc_meta_boost3c_test, main = paste("AUC = ", round(meta_boost3c_auc,4)))
+
+# Comparison
+par(mfrow = c(1,2))
+MMCE_meta_total <- c(meta_boost2_testerror, meta_boost3a_testerror, meta_boost3b_testerror, meta_boost3c_testerror)
+AUC_meta_total <- c(meta_boost2_auc, meta_boost3a_auc, meta_boost3b_auc, meta_boost3c_auc)
+
+plot(MMCE_meta_total, xlab = "Method", ylab = "MMCE", xaxt = "n", type = "b", main = "Comparsion of Misclassification Error")
+axis(1, c(1:4), labels = c("2", "3a", "3b", "3c"))
+
+plot(AUC_meta_total, xlab = "Method", ylab = "AUC", xaxt = "n", type = "b", main = "Comparsion of AUC")
+axis(1, c(1:4), labels = c("2", "3a", "3b", "3c"))
+```
+
+From the MMCE and AUC, we found the best model is the model with parameter of shrinkage = 0.001 and depth = 1.
+ 
+
+
+### Exercise 3 -- Analysis
+In this exercise you will reproduce the comparison described in the textbook of support vector machines with different kernels on the heart data.
+
+i. You will first tune an svm with a radial basis function (RBF) kernel with respect to its two parameters $\,C$ and $\,\gamma$
+
+```{r}
+library(irace)
+library(kernlab)
+detach("package:pROC")
+# We have split the data in Exercise 1.
+
+rbfsvm.lrn = makeLearner("classif.ksvm", par.vals = list(kernel = "rbfdot"), predict.type = "prob")
+
+# Notice the "prob" argument requiring class probabilites are returned
+# How is that possible if SVMs are 0-1 clssifiers??
+# SVMs are indeed 0-1 clssifiers but they can be made to estimate class probabilities 
+# based on the distance to the classification hyperplane: 
+# (the further away the more confident about the classification to the corresponding class)
+set.seed(20190420)
+
+cv5_stratified = makeResampleDesc("CV", iters=5, stratify = TRUE) 
+# 5-fold CV seems reasonable given the size of the training data
+
+ctrl = makeTuneControlIrace(maxExperiments = 200L)  
+#This tuning control specifies use of the package ``irace`` which efficiently explores the space of tuning parameters to find the best configuration
+
+ps = makeParamSet(
+  makeDiscreteParam("C", values = seq(1e-6, 5, length=10)),
+  makeDiscreteParam("sigma", values = c(1e-3, 1e-2, 1e-1))      # The sigma here parameter is our gamma parameter in the lecture!!
+)
+
+heart_svm_tune = tuneParams(rbfsvm.lrn, subsetTask(heart_tsk, heart_train), cv5_stratified, measures=list(auc, mmce), par.set = ps, control = ctrl)
+
+heart_svm_tune
+```
+
+ii. Retrain on the training set using a) the optimal set of parameters (best CV AUC) and b) a/the set of parametrs with the worst CV AUC. Predict on the test set using both sets sof parameters, plot the corresponding test ROC curves, and compute the test AUCs. (hint: remember the ``mlr`` function ``plotROCCurves``.) Based on these results, does parameter tuning make a big difference in performance?
+
+```{r}
+set.seed(20190420)
+# Optimal set
+heart_svm_lnr <- makeLearner("classif.ksvm", par.vals = list(kernel = "rbfdot", C = heart_svm_tune$x[[1]], sigma = heart_svm_tune$x[[2]]), predict.type = "prob")
+
+heart_svm_train_opt <- train(heart_svm_lnr, task = heart_tsk, subset = heart_train)
+
+heart_svm_predicttest <- predict(heart_svm_train_opt, newdata = heart[heart_test,])
+heart_svm_train_roc <- generateThreshVsPerfData(heart_svm_predicttest, list(fpr, tpr))
+plotROCCurves(heart_svm_train_roc)
+performance(heart_svm_predicttest, measures = list(mmce, auc))
+
+# Worst CV AUC
+heart_cvsvm_result <- heart_svm_tune$opt.path$env$path
+
+worst_index <- which(heart_cvsvm_result$auc.test.mean == min(heart_cvsvm_result$auc.test.mean))
+
+heart_svm_lnr_worst <- makeLearner("classif.ksvm", par.vals = list(kernel = "rbfdot", C = as.numeric(heart_cvsvm_result$C[worst_index]), sigma = as.numeric(heart_cvsvm_result$sigma[worst_index])), predict.type = "prob")
+
+heart_svm_train_worst <- train(heart_svm_lnr_worst, task = heart_tsk, subset = heart_train)
+heart_svm_predicttest_worst <- predict(heart_svm_train_worst, newdata = heart[heart_test,])
+heart_svm_train_roc_worst <- generateThreshVsPerfData(heart_svm_predicttest_worst, list(fpr, tpr))
+plotROCCurves(heart_svm_train_roc_worst)
+performance(heart_svm_predicttest_worst, measures = list(mmce, auc))
+```
+
+Based on the result, the mmce and auc of optimal set are 0.156 and 0.928 while those of worst condition are 0.167 and 0.904. There is slight difference between optimal set and worst condition.
+
+iii. Retrain on the full dataset (using the optimal parameter set only)
+
+```{r}
+heart_svm_final <- train(heart_svm_lnr, task = heart_tsk)
+heart_svm_final$learner.model
+```
+
+
+iv. The code below extends the comparison above to include both and RBF, a polynomial kernel, and the linear kernel (i.e. support vector classifier). Now, RBF, the linear and the polynomial kernels share the cost parameter $\,C$ but also have additional non-shared tuning parameters (the polynomial degree $\,d$ is a tuning parameter only for polynomial kernels and $\,gamma$ is a tuning parameter only for RBF kernels). The code below constructs a set of parameters that enables tuning both shared and non-shared parameters all at once! 
+
+
+```{r}
+
+ps_extended = makeParamSet(
+  makeDiscreteParam("kernel", values = c("vanilladot", "polydot", "rbfdot")),
+  makeDiscreteParam("C", values = seq(1e-6, 5, length=10) ),
+  makeDiscreteParam("sigma", values = c(1e-3, 1e-2, 1e-1), requires = quote(kernel == "rbfdot") ), 
+  makeIntegerParam("degree", lower = 1L, upper = 5L, requires = quote(kernel == "polydot") )
+)
+  
+# Notice that the type of kernel itself is a tuning parameter in the specification above!!!
+```
+
+Tune the svm learner using this extended set of parameters ``ps_extended``.
+
+```{r}
+set.seed(20190420)
+ctrl_expanded <- makeTuneControlIrace(maxExperiments = 1000L)  
+heart_svm_lnr_expanded <- makeLearner("classif.ksvm", predict.type = "prob")
+heart_svm_tune_expanded = tuneParams(heart_svm_lnr_expanded, subsetTask(heart_tsk, heart_train), cv5_stratified, measures=list(auc, mmce), par.set = ps_extended, control = ctrl_expanded, show.info = F)
+
+heart_svm_tune_expanded
+```
+
+v. Explore a wider range of values for $\,C$, $\,\gamma$ and $\,d$ and repeat ii. and iii. Which kernel performed best? What may this say about the nature of the true decision boundary?
+
+```{r}
+ps_wider = makeParamSet(
+  makeDiscreteParam("kernel", values = c("vanilladot", "polydot", "rbfdot")),
+  makeDiscreteParam("C", values = seq(1e-7, 10, length=20) ),
+  makeDiscreteParam("sigma", values = c(1e-4, 1e-3, 1e-2, 1e-1, 1), requires = quote(kernel == "rbfdot") ), 
+  makeIntegerParam("degree", lower = 1L, upper = 10L, requires = quote(kernel == "polydot") )
+)
+
+ctrl_wider = makeTuneControlIrace(maxExperiments = 2000L)  
+
+set.seed(20190420)
+heart_svm_lnr_wider <- makeLearner("classif.ksvm", predict.type = "prob")
+heart_svm_tune_wider = tuneParams(heart_svm_lnr_expanded, subsetTask(heart_tsk, heart_train), cv5_stratified, measures=list(auc, mmce), par.set = ps_wider, control = ctrl_wider, show.info = F)
+
+heart_svm_tune_wider
+
+# Optimal set
+heart_svm_lnr_wider_opt <- makeLearner("classif.ksvm", par.vals = list(kernel = "vanilladot", C = heart_svm_tune_wider$x[[2]]), predict.type = "prob")
+
+heart_svm_wider_train_opt <- train(heart_svm_lnr_wider_opt, task = heart_tsk, subset = heart_train)
+
+heart_svm_wider_predicttest <- predict(heart_svm_wider_train_opt, newdata = heart[heart_test,])
+heart_svm_wider_train_roc <- generateThreshVsPerfData(heart_svm_wider_predicttest, list(fpr, tpr))
+plotROCCurves(heart_svm_wider_train_roc)
+performance(heart_svm_wider_predicttest, measures = list(mmce, auc))
+
+# Worst CV AUC
+heart_cvsvm_wider_result <- heart_svm_tune_wider$opt.path$env$path
+
+worst_wider_index <- which(heart_cvsvm_wider_result$auc.test.mean == min(heart_cvsvm_wider_result$auc.test.mean))
+
+heart_svm_lnr_wider_worst <- makeLearner("classif.ksvm", par.vals = list(kernel = "polydot", C = as.numeric(heart_cvsvm_wider_result$C[worst_index]), degree = as.numeric(heart_cvsvm_wider_result$degree[worst_index])), predict.type = "prob")
+
+heart_svm_wider_train_worst <- train(heart_svm_lnr_wider_worst, task = heart_tsk, subset = heart_train)
+heart_svm_wider_predicttest_worst <- predict(heart_svm_wider_train_worst, newdata = heart[heart_test,])
+heart_svm_wider_train_roc_worst <- generateThreshVsPerfData(heart_svm_wider_predicttest_worst, list(fpr, tpr))
+plotROCCurves(heart_svm_wider_train_roc_worst)
+performance(heart_svm_wider_predicttest_worst, measures = list(mmce, auc))
+
+heart_svm_wider_final <- train(heart_svm_lnr_wider_opt, task = heart_tsk)
+heart_svm_wider_final$learner.model
+```
+
+Kernel rbfdot perform best with mmce = 0.111 and auc = 0.935. In such case, we find the decision boundary will fit rbfdot kernel, which means the boundary will be like a circle.
+
+
+#### Exercise 4 -- Analysis
+Train svms on the metabric data in a similar way to part iv of Exercise 3 and report your results.
+
+```{r}
+meta_svm_lnr <- makeLearner("classif.ksvm", predict.type = "prob")
+# we'll use the task and split defined before
+# We'll use the parameter defined before
+
+set.seed(20190420)
+ctrl_meta <- makeTuneControlIrace(maxExperiments = 250L) 
+meta_svm_tune <- tuneParams(meta_svm_lnr, subsetTask(meta_tsk, meta_train), cv5_stratified, measures=list(auc, mmce), par.set = ps_extended, control = ctrl_meta, show.info = F)
+meta_svm_tune
+
+meta_svm_lnr_opt <- makeLearner("classif.ksvm", par.vals = list(kernel = meta_svm_tune$x[[1]], C = meta_svm_tune$x[[2]], degree = meta_svm_tune$x[[3]]), predict.type = "prob")
+
+meta_svm_train_opt <- train(meta_svm_lnr_opt, task = meta_tsk, subset = meta_train)
+
+meta_svm_predicttest <- predict(meta_svm_train_opt, newdata = metabric[meta_test,])
+meta_svm_train_roc <- generateThreshVsPerfData(meta_svm_predicttest, list(fpr, tpr))
+plotROCCurves(meta_svm_train_roc)
+performance(meta_svm_predicttest, measures = list(mmce, auc))
+
+meta_svm_final <- train(meta_svm_lnr_opt, task = meta_tsk)
+meta_svm_final$learner.model
+```
+
+The optimal set is polydot kernel with degree = 3 and C = 2.22. The performance of the model is 17.36% misclassification and AUC = 0.81.
+

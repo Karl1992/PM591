@@ -1,0 +1,377 @@
+---
+title: Prediction Model on Future Inpatients' Mortality Based on 2012 NIS (National
+  Inpatient Sample) Database
+author: "Chao XIA"
+date: "04/28/2019"
+output:
+  html_document: default
+  pdf_document: default
+editor_options:
+  chunk_output_type: inline
+---
+***
+
+# Introduction
+
+Inpatients' motality is always a hotspot in in-hospital research based on NIS (National Inpatient Sample). In 2009, Justina and Geoffrey found that in-hospital mortality was two-fold higher among patients wiht cirrhosis and PCM (protein–calorie malnutrition). <sup>[1]</sup> In 2012, Chirag reported that gender, preoperative comorbidities, complications, and low hospital volume were associated with and increased risk of in-hospital mortality.<sup>[2]</sup> In 2016,  Siva found alcohol-related diagnoses were associated with increased mortality in AMI (Acute Myocardial Infarction) patients.<sup>[3]</sup>  In 2017, Kanishk and his group found that artial fibrillation was independently associated with in-hospital mortality. <sup>[4]</sup> In 2003, 2014 and 2017, Justin<sup>[5]</sup>, Laura<sup>[6]</sup> and Barret<sup>[7]</sup>, respectively, reported that hosptial volume was associated with in-hospital mortality of Aorto-bifemoral bypass, Pancreaticoduodenectomy and hemorrhage severity. In 2014, Marya indicated that inpatients experienced significantly higher mortality with higher length of stay and total costs.<sup>[8]</sup> In 2013, Gaurav pointed out that inpaitents' mortality was associated with  Percutaneous Endoscopic Gastrostomy (PEG).<sup>[9]</sup> In 2018, Toml showed that African-American patients experienced higher in-hospital mortality than White patients.<sup>[10]</sup> 
+
+In 2016 and 2017, Joseph<sup>[11]</sup> and Urshila<sup>[12]</sup> did some research on predictors of in-hospital outcome. Urshila found that age, Elixhauser comorbidity score, insurance status, teaching versus nonteaching hospital and cancer type could be predictors of inpatients' mortality following atlantoaxial fusion via logistic regression, while Urshila used the same method to indicate that age, emergent of urgent admissions, weekend admissions, congestive heart failure, coagulopathy, depression, electrolyte disorder, metastatic cancer, neurologic disorder, paralysis and non-bleeding peptic ulcer could be predictors of in-hospital mortality of Tumor Lysis Syndrome.
+
+Most of these research were concentrated on the association between inpatients' mortality and some variables including inpatients' diagnosis, procedure experienced, length of stay, total charge and race. And Joseph and Urshilla gave the predictor without a proper prediction model. 
+
+Machine learning techniques have been extensively applied as a decision making support tool in the complex environment of health data analysis. Research efforts in healthcare informatics domain have proposed such systems that span from classifying electrocardiography (ECG) signals and regulation of glucose levels of diabetic patients to cancer diagnosis, home rehabilitation, diagnosis of Alzheimer’s disease and mental health disorders.<sup>[13]</sup>
+
+In such case, base on these previous research and the strong prediction ability of machine learning, we aimed to use the data NIS database provided to fit a model to predict the future inpatients' mortality via machine learning methods.
+
+2012 NIS database was used and 200,000 observations and 175 variables were included. There are 16 continuous variables and 159 catergorical variables in this dataset. Among these observations, missing data existed in some variables while invalid data were labeled as "A" and inconsistent data were labeled as "C". Variables labeled as "ran" and "subselect" were meaningless in this dataset. Variables labeled as "HOSP_NIS" and "KEY_NIS" were not available in the predicition procedure. Our outcome of interest, inpatients' mortality was labeled as "DIED".
+
+```{r,eval=F, echo=F}
+setwd("D:/study/MasterinUSC/PM591/final project")
+NIS <- read.csv("NIS2012-200K.csv")
+nis <- NIS
+```
+
+***
+
+# Method
+
+***
+
+## Data Cleaning
+
+Not all features were meaningful for prediction of inpatients' mortality in the 2012 NIS dataset and some features showed the same information as other features did. Based on the previous research<sup>[12,13]</sup> and our knowledge, we decided to choose less than 70 features to be included in our study.
+
+We divided all 175 variables into five catergories including Demographic Characteristics, Admission Information, Disease Information, Hospital Information, Payment Information and Outcome. 54 features labeled as "AGE", "FEMALE", "RACE", "HOSPBRTH", "PL_NCHS2006", "ZIPINC_QRTL", "AMONTH", "AWEEKEND", "ELECTIVE", "LOS", "TRAN_IN", "CM_AIDS", "CM_ALCOHOL", "CM_ANEMDEF", "CM_ARTH", "CM_BLDLOSS",	"CM_CHF",	"CM_CHRNLUNG", "CM_COAG", "CM_DEPRESS", "CM_DM",	"CM_DMCX", "CM_DRUG", "CM_HTN_C",	"CM_HYPOTHY",	"CM_LIVER", "CM_LYMPH",	"CM_LYTES", "CM_METS", "CM_NEURO", "CM_OBESE", "CM_PARA", "CM_PERIVASC", "CM_PSYCH", "CM_PULMCIRC",	"CM_RENLFAIL", "CM_TUMOR", "CM_ULCER", "CM_VALVE",	"CM_WGHTLOSS", "NEOMAT", "APRDRG_Risk_Mortality", "APRDRG_Severity", "MDC", "NDX", "ORPROC", "NCHRONIC", "NECODE", "HCUP_ED", "NPR", "HOSP_DIVISION", "NIS_STRATUM", "PAY1", "TOTCHG" were selected as predictors. 6 of them were continuous variables and others were categorical variables. Variable labeled as "DIED" was selected as outcome of interest.
+
+```{r, eval=F, echo=F}
+nis <- nis[,c("AGE", "FEMALE", "RACE", "HOSPBRTH", "PL_NCHS2006", "ZIPINC_QRTL", "AMONTH", "AWEEKEND", "ELECTIVE", "LOS", "TRAN_IN", "CM_AIDS", "CM_ALCOHOL", "CM_ANEMDEF", "CM_ARTH", "CM_BLDLOSS",	"CM_CHF",	"CM_CHRNLUNG", "CM_COAG", "CM_DEPRESS", "CM_DM",	"CM_DMCX", "CM_DRUG", "CM_HTN_C",	"CM_HYPOTHY",	"CM_LIVER", "CM_LYMPH",	"CM_LYTES", "CM_METS", "CM_NEURO", "CM_OBESE", "CM_PARA", "CM_PERIVASC", "CM_PSYCH", "CM_PULMCIRC",	"CM_RENLFAIL", "CM_TUMOR", "CM_ULCER", "CM_VALVE",	"CM_WGHTLOSS", "NEOMAT", "APRDRG_Risk_Mortality", "APRDRG_Severity", "MDC", "NDX", "ORPROC", "NCHRONIC", "NECODE", "HCUP_ED", "NPR", "HOSP_DIVISION", "NIS_STRATUM", "PAY1", "TOTCHG","DIED")]
+
+#transfer data into right forms
+#tranfer numeric variables into factor variables
+for(i in 1:55){
+  nis[,i] <- as.factor(nis[,i])
+}
+#transfer into numeirc(6 continous variables)
+nis$AGE <- as.numeric(as.character(nis$AGE))
+nis$LOS <- as.numeric(as.character(nis$LOS))
+nis$NDX <- as.numeric(as.character(nis$NDX))
+nis$NCHRONIC <- as.numeric(as.character(nis$NCHRONIC))
+nis$NECODE <- as.numeric(as.character(nis$NECODE))
+nis$NPR <- as.numeric(as.character(nis$NPR))
+nis$TOTCHG <- as.numeric(as.character(nis$TOTCHG))
+```
+
+Missing data were removed for continuous variables as well as invalid data and inconsistent data. Invalid data and missing data were also removed for categorical data. 
+
+```{r, eval=F, echo=F}
+nis <- nis[complete.cases(nis$AGE),]
+nis <- nis[complete.cases(nis$PL_NCHS2006),]
+nis <- nis[complete.cases(nis$AMONTH),]
+nis <- nis[complete.cases(nis$AWEEKEND),]
+nis <- nis[complete.cases(nis$TRAN_IN),]
+nis <- nis[complete.cases(nis$LOS),]
+nis <- nis[complete.cases(nis$TOTCHG),]
+
+# Gender
+nis$FEMALE <- as.character(nis$FEMALE)
+nis <- nis[-which(nis$FEMALE==""),]
+nis$FEMALE <- as.factor(nis$FEMALE)
+
+#race
+nis$RACE <- as.character(nis$RACE)
+nis <- nis[-which(nis$RACE==""),]
+nis <- nis[-which(nis$RACE=="A"),]
+nis$RACE <- as.factor(nis$RACE)
+
+#ZIPINC_QRTL
+nis$ZIPINC_QRTL <- as.character(nis$ZIPINC_QRTL)
+nis <- nis[-which(nis$ZIPINC_QRTL==""),]
+nis$ZIPINC_QRTL <- as.factor(nis$ZIPINC_QRTL)
+
+#ELECTIVE
+nis$ELECTIVE <- as.character(nis$ELECTIVE)
+nis <- nis[-which(nis$ELECTIVE==""),]
+nis <- nis[-which(nis$ELECTIVE=="A"),]
+nis$ELECTIVE <- factor(nis$ELECTIVE)
+
+#DIED
+nis <- nis[-which(nis$DIED=="A"),]
+nis <- nis[-which(nis$DIED==""),]
+nis$DIED <- as.character(nis$DIED)
+nis$DIED <- as.factor(nis$DIED)
+
+#PAY1
+nis$PAY1 <- as.character(nis$PAY1)
+nis <- nis[-which(nis$PAY1==""),]
+nis <- nis[-which(nis$PAY1=="A"),]
+nis$PAY1 <- as.factor(nis$PAY1)
+```
+
+Feature labeled as "NIS_STRATUM" was recoded as four new features since this feature had 196 levels and algorithm such as Random Forest can not handle a variable include too many levels. These four new features were labeled as "HOSP_DIVISION", "HOSP_CONTROL", "HOSP_LOCTEACH" and "BEDSIZE".
+
+```{r, eval=F, echo=F}
+HOSP_CONTROL <- numeric()
+HOSP_LOCTEACH <- numeric()
+HOSP_BEDSIZE <- numeric()
+for (i in 1:nrow(nis)) {
+  inter <- strsplit(as.character(nis$NIS_STRATUM[i]),split = "")[[1]]
+  HOSP_CONTROL[i] <- as.numeric(inter[2])
+  HOSP_LOCTEACH[i] <- as.numeric(inter[3])
+  HOSP_BEDSIZE[i] <- as.numeric(inter[4])
+}
+nis <- nis[,-which(colnames(nis)=="NIS_STRATUM")]
+HOSP_CONTROL <- as.factor(HOSP_CONTROL)
+HOSP_LOCTEACH <- as.factor(HOSP_LOCTEACH)
+HOSP_BEDSIZE <- as.factor(HOSP_BEDSIZE)
+nis <- cbind(nis, HOSP_CONTROL, HOSP_LOCTEACH, HOSP_BEDSIZE)
+
+write.csv(nis, file = "nis_final.csv", row.names = F)
+```
+
+178,357 observations and 57 variables were included in our study. There are 6 continious features, 50 categorical features and 1 outcome of interest. The dataset was highly unbalanced since there were 3238 death and 175,119 survival in the dataset.
+
+***
+
+## Machine Learning Method
+
+Since we are intereseted in the prediction of death status, we should apply different classification methods in our study. We have far more observations than features, so overfitting would not be concerned. In such case, logistic regression, ridge regression, lasso regression, LDA, and random forest will be applicable to train the data.
+
+$\lambda$ from 0 to 50 will be tuned for ridge regression while $\lambda$ from 0 to 0.05 will be tuned for lasso regression. Dummy variables were created for LDA and logistic regression.
+
+The dataset will be split into 70% for train set and 30% for test set. In order to reduce the variance, the best model will be selected by bagging for random forest and cross-validation for other method on train set via AUC since the dataset is highly unbalanced. Measurement of misclassfication error would cause bias. 
+
+Performace of best model will be evaluated on test set via AUC and ROC curve.
+
+```{r, eval=F, echo=F}
+setwd("D:/study/MasterinUSC/PM591/final project")
+
+# split
+set.seed(20190429)
+library(mlr)
+
+nis_tsk <- makeClassifTask(id="death",data=nis,target="DIED")
+
+split_desc <- makeResampleDesc(method='Holdout',stratify=TRUE,split=0.7)
+split <- makeResampleInstance(split_desc,task=nis_tsk)
+trainset <- split$train.inds[[1]]
+testset <- split$test.inds[[1]]
+
+
+# lda and qda
+## creat dummy variables
+nis_dummy <- createDummyFeatures(nis, target = "DIED")
+nis_ida_tsk <- makeClassifTask(id = "nis lda", data = nis_dummy[trainset,], target = "DIED")
+nis_lda_learner <- makeLearner("classif.lda", fix.factors.prediction = T, predict.type = "prob")
+nis_qda_learner <- makeLearner("classif.qda", fix.factors.prediction = T, predict.type = "prob")
+
+nis_lda_cv <- crossval(nis_lda_learner, nis_ida_tsk, iters = 10L, stratify = T, measures = list(auc,mmce))
+### nis_qda_cv <- crossval(nis_qda_learner, nis_ida_tsk, iters = 10L, stratify = T, measures = list(auc,mmce)) rank deficiency
+
+nis_lda_cv_r <- nis_lda_cv$aggr
+nis_lda_cv_table <- nis_lda_cv$measures.test[,c(1,2)]
+write.csv(nis_lda_cv_table, file = "D:/study/MasterinUSC/PM591/final project/manuscript/ldacvtable.csv", row.names = F)
+
+nis_lda <- train(nis_lda_learner, nis_ida_tsk)
+lda_pred <- predict(nis_lda, newdata = nis_dummy[testset,], type = "prob")
+lda_test_table <- calculateConfusionMatrix(lda_pred)
+lda_test_auc <- performance(lda_pred, measures = auc)
+lda_test_roc <- generateThreshVsPerfData(lda_pred, measures = list(fpr, tpr))
+
+png(file = "lda test roc.png")
+plotROCCurves(lda_test_roc)
+dev.off
+
+write.csv(lda_test_table$result, file = "D:/study/MasterinUSC/PM591/final project/manuscript/ldatesttable.csv")
+
+
+# ridge and lasso
+ridge_lnr <- makeLearner("classif.cvglmnet", fix.factors.prediction=TRUE, predict.type="prob", alpha=0, type.measure='auc')
+lasso_lnr <- makeLearner("classif.cvglmnet", fix.factors.prediction=TRUE, predict.type="prob", alpha=1, type.measure='auc')
+
+nis_ridge_cv <- train(learner=ridge_lnr,task=nis_tsk,subset=trainset)
+lambda_ridge <- nis_ridge_cv$learner.model$lambda.min
+ridge_cv_r <- nis_ridge_cv$learner.model$cvm[length(nis_ridge_cv$learner.model$cvm)]
+png(file = "cvplot_ridge.png")
+plot(y = nis_ridge_cv$learner.model$cvm, x = nis_ridge_cv$learner.model$lambda, main = c("CV for Ridge Regression","Figure 2"), type = "b", xlab = "Lambda", ylab = "AUC", col = "red")
+abline(v = lambda_ridge, lty = 2)
+dev.off()
+
+nis_lasso_cv <- train(learner=lasso_lnr,task=nis_tsk,subset=trainset)
+lambda_lasso <- nis_lasso_cv$learner.model$lambda.min
+lasso_cv_r <- nis_lasso_cv$learner.model$cvm[length(nis_lasso_cv$learner.model$cvm)]
+png(file = "cvplot_lasso.png")
+plot(y = nis_lasso_cv$learner.model$cvm, x = nis_lasso_cv$learner.model$lambda, main = c("CV for Lasso Regression","Figure 3"), type = "b", xlab = "Lambda", ylab = "AUC", col = "red")
+abline(v = lambda_lasso, lty = 2)
+dev.off()
+
+nis_ridge_lnr <- makeLearner("classif.glmnet", lambda = lambda_ridge, fix.factors.prediction=TRUE, predict.type="prob", alpha=0)
+nis_lasso_lnr <- makeLearner("classif.glmnet", lambda = lambda_lasso, fix.factors.prediction=TRUE, predict.type="prob", alpha=1)
+
+nis_ridge <- train(learner=nis_ridge_lnr,task=nis_tsk,subset=trainset)
+nis_lasso <- train(learner=nis_lasso_lnr,task=nis_tsk,subset=trainset)
+
+nis_ridge_predict <- predict(nis_ridge, newdata = nis[testset,])
+ridge_test_table <- calculateConfusionMatrix(nis_ridge_predict)
+ridge_test_auc <- performance(nis_ridge_predict, measures = list(auc, mmce))
+ridge_test_roc <- generateThreshVsPerfData(nis_ridge_predict, measures = list(fpr, tpr))
+
+png(file = "ridge test roc.png")
+plotROCCurves(ridge_test_roc)
+dev.off
+
+write.csv(ridge_test_table$result, file = "D:/study/MasterinUSC/PM591/final project/manuscript/ridge_test_table.csv")
+
+nis_lasso_predict <- predict(nis_lasso, task = nis_tsk, subset = testset)
+lasso_test_table <- calculateConfusionMatrix(nis_lasso_predict)
+lasso_test_auc <- performance(nis_lasso_predict, measures = list(auc, mmce))
+lasso_test_roc <- generateThreshVsPerfData(nis_lasso_predict , measures = list(fpr, tpr))
+
+png(file = "lasso test roc.png")
+plotROCCurves(lasso_test_roc)
+dev.off
+
+write.csv(ridge_test_table$result, file = "D:/study/MasterinUSC/PM591/final project/manuscript/lasso_test_table.csv")
+
+# RF
+library(randomForest)
+library(pROC)
+
+nis_RF <- randomForest(DIED~.,data=nis[trainset,], mtry=sqrt(56), ntree=500, strata=nis$DIED[trainset,], samplesize=as.vector(table(nis$DIED[trainset])))
+
+nis_RF$importance
+
+head(nis_RF$votes)
+
+png(file = "cvplot_rf.png")
+varImpPlot(nis_RF, cex.lab=1.5, cex.axis=2, cex=1.3, n.var=20, main="", pch=16, col='red4')
+dev.off()
+roc_train <- roc(nis[trainset,]$DIED,nis_RF$votes[,1])
+
+rf_auc <- auc(roc_train)
+ci.auc(roc_train)
+
+nis_rf_predict_prob <- predict(nis_RF, newdata = nis[testset,], type = "prob")
+nis_rf_predict <- predict(nis_RF, newdata = nis[testset,], type = "class")
+
+rf_test_error <- measureMMCE(truth = nis[testset,]$DIED, response = nis_rf_predict)
+
+rf_test_roc <- roc(nis[testset,]$DIED, nis_rf_predict_prob[,1])
+png(file = "RF test roc.png")
+plot(rf_test_roc, main = c("ROC curve for test Random Forest", "Figure 6"))
+dev.off
+
+write.csv(ridge_test_table$result, file = "D:/study/MasterinUSC/PM591/final project/manuscript/ridge_test_table.csv")
+detach("package:pROC")
+
+# logistic regression
+logreg_lnr <- makeLearner("classif.logreg", fix.factors.prediction=TRUE, predict.type="prob")
+rdesc <- makeResampleDesc("CV",iters=10L)
+log_tsk <- makeClassifTask(id = "logistic", nis_dummy, target = "DIED")
+log_tsk_train <- subsetTask(log_tsk,subset=trainset)
+ctrl_forward <- makeFeatSelControlSequential(method='sfs')
+psa_forwd=selectFeatures(learner=logreg_lnr,task=log_tsk_train, resampling=rdesc,measures=auc, control=ctrl_forward,show.info=TRUE)
+psa_forwd$x
+cv_auc_forward <- psa_forwd$y
+
+nis_logit_tsk <- log_tsk <- makeClassifTask(id = "logistic", nis_dummy[,c("AGE", "APRDRG_Risk_Mortality.3", "APRDRG_Risk_Mortality.4", "DIED")], target = "DIED")
+nis_logit <- train(logreg_lnr, task = nis_logit_tsk, subset = trainset)
+
+nis_logit$learner.model
+
+nis_logit_pred <- predict(nis_logit, newdata = nis_dummy[testset,])
+
+logit_test_table <- calculateConfusionMatrix(nis_logit_pred)
+logit_test_auc <- performance(nis_logit_pred, measures = list(auc, mmce))
+logit_test_roc <- generateThreshVsPerfData(nis_logit_pred, measures = list(fpr, tpr))
+
+png(file = "logit test roc.png")
+plotROCCurves(logit_test_roc)
+dev.off
+
+write.csv(logit_test_table$result, file = "D:/study/MasterinUSC/PM591/final project/manuscript/logit_test_table.csv")
+
+# plot auc
+comparison <- c(nis_lda_cv_r[1], ridge_cv_r, lasso_cv_r, rf_auc, cv_auc_forward)
+png(file = "comparsion.png")
+plot(comparison, main = c("Comparsion of AUCs of Different Method", "Figure 4"), xaxt = "n", type = "b", xlab = "Method", ylab = "AUC")
+axis(1, c(1:5), labels = c("LDA", "Ridge", "Lasso", "RF", "Logit"))
+dev.off()
+```
+
+***
+
+# Result
+Inpatient's mortality labeled DIED is our outcome of interest including 3,238 deaths and 17,5119 survivals in total dataset. In the train dataset, 2,266 deaths and 12,2583 survivals were included while in the test dataset, 972 deaths and 52,536 survivals were included (Table 1).
+
+```{r, echo=F, eval=F}
+table(nis$DIED)
+table(nis[trainset,]$DIED)
+table(nis[testset,]$DIED)
+```
+
+```{r, echo=FALSE, out.width = '50%'}
+knitr::include_graphics("D:/study/MasterinUSC/PM591/final project/manuscript/summary.png")
+knitr::include_graphics("D:/study/MasterinUSC/PM591/final project/manuscript/ldatable.png")
+```
+
+LDA was applied to predict the model. 10-folds cross-validation was used to evaluate the performance of the model (Table 1). AUC of LDA model for train set is 0.9375. Performance of LDA was evaluated on test set. The misclassification error of LDA is 4.44% (Table 2) and AUC is 0.929 (Figure 1) for test set.
+
+```{r, echo=FALSE, out.width = '50%'}
+knitr::include_graphics("D:/study/MasterinUSC/PM591/final project/manuscript/ldatesttable.png")
+knitr::include_graphics("D:/study/MasterinUSC/PM591/final project/manuscript/logit table.png")
+```
+
+Ridge and Lasso regression were also evaluated. Cross-validation was used to choose the best $\lambda$. The optimal $\lambda$ is 0.0055 for ridge regression with AUC of 0.9469 (Figure 2) for train set while 0.00016 is the optimal $\lambda$ for lasso regression with AUC of 0.9471 (Figure 3) for train set. Ridge and lasso regression were retrained by using the opitmal $\lambda$. Performance of these two model were evaluated. Their prediction ability were both not good with AUC of 0.5 and misclassification error larger than 95%, which means the prediction will be better if we exchange the result of prediction to the opposite. 
+
+```{r, echo=FALSE, out.width = '33%'}
+knitr::include_graphics("D:/study/MasterinUSC/PM591/final project/lda test roc.png")
+knitr::include_graphics("D:/study/MasterinUSC/PM591/final project/cvplot_ridge.png")
+knitr::include_graphics("D:/study/MasterinUSC/PM591/final project/cvplot_lasso.png")
+```
+
+Random forest gives the AUC of 0.9514 for train set. Performance of Random forest was evaluated on test set. The misclassification error of Random forest is 1.61% and test AUC is 0.9496 (Figure 4) for test set. Importance of variables were evaluated. LOS and APRDRG_RISK_Mortality are the most two important variables according to Random Forest.
+
+```{r, echo=FALSE, out.width = '50%'}
+knitr::include_graphics("D:/study/MasterinUSC/PM591/final project/RF test roc.png")
+knitr::include_graphics("D:/study/MasterinUSC/PM591/final project/cvplot_rf.png")
+```
+
+
+Variables were selected for logsitic regression via cross-validation and forward stepwise. Age, APRDRG_Risk_Mortality.3, APRDRG_Risk_Mortality.4 were chosen into the model with AUC of for train set. The model is logit =  -6.7812  + 0.0135 * Age + 2.5203 * APRDRG_Risk_Mortality.3 + 4.7419 * APRDRG_Risk_Mortality.4. Train model was fit by these varialbes. Accroding to the p-value, these three variables are statistically significantly associated with the outcome. Performance of logsitic regression was evaluated on test set. The misclassification error of logsitic regression is 1.82% (Table 3) and test AUC is 0.9243 (Figure 6) for test set.
+
+```{r, echo=FALSE, out.width = '50%'}
+knitr::include_graphics("D:/study/MasterinUSC/PM591/final project/logit test roc.png")
+knitr::include_graphics("D:/study/MasterinUSC/PM591/final project/comparsion.png")
+```
+
+# Discussion and conclusion
+
+The optimal model was selected by cross-validation. Random forest performances best with AUC of (Figure 7). Peformance of random forest is good with misclassification of 1.61% and AUC of 0.9496 on test set, which proves that random forest is a sufficient way to predict inpatients' mortality. But one thing we should notice for the dataset is that this dataset is quite unbalance with 3238 death and 175,119 survival. If we use misclassfication error to evaluate the performance, it will cause a huge bias. In such case, AUC may be a better way to evaluate the performance.
+
+# Reference
+
+[1] J. Sam, G. C. Nguyen. _Liver International_, 2009, 29(9), 1396-1402.
+
+[2] C. G. Patil, A. L. Alexander, M. G. H. Gephart, S. P. Lad, R. T. Arrigo, M. Boakye. _World Neurosurg._, 2012, 78 (6), 640 - 645.
+
+[3] S. H. Yedlapati, A. Mendu, S. H. Stewart. _Journal of Hospital Medicine_, 2016, 11(8), 563–567
+.
+[4] K. Agnihotri, N.V. Pothineni, P. Charilaou, V. R. Vaidya, B. Thakkar, V. Goyal, S. Kadavath, N. Patel, A. Badheka, P. Noseworthy, S. Kapa, P. Friedman, B. Gersh, H. Paydak, A. Deshmukh. _International Journal of Cardiology._, 2017, 250, 128–132.  
+
+[5] J. B. Dimick, J. A. Cowan, Jr,  P. K. Henke, R. M. Wainess, S. Posner, J. C. Stanley, G. R. Upchurch, Jr. _Journal Of Vascular Surgery_, 2003, 37(5), 972 - 975.
+
+[6] L. M. Enomoto, N. J. Gusani, P. W. Dillon, C. S. Hollenbeak. _J. Gastrointest Surg._, 2014, 18, 690–700.
+
+[7] B. Rush, K. Romano, M. Ashkanani, R. C. McDermid, L. A. Celi. _Journal of Critical Care_, 2017, 37, 240–243.
+
+[8] M. D. Zilberberg, A. F. Shorr, H. Huang, P. Chaudhari, V. F. Paly, J. Menzin. _BMC Infectious Diseases_, 2014, 14, 310 - 319.
+
+[9] G. Arora, D. Rockey, S. Gupta. _Clinical Gastroenterology and Hepatology_, 2013, 11(11), 1437–1444.
+
+[10] T. Akinyemiju, G. Naik, K. Ogunsina,D. Dibaba,N. Vin-Raviv. _Cancer Causes and Control_, 2018, 29(3), 333–342.
+
+[11] J. Tanenbaum, D. Lubelski, B. Rosenbaum, N. Thompson, E. Benzel, T. Mroz. _The Spine Journal._, 16(5), 2016, 608–618. 
+
+[12] U. Durani, N. Shah, R. Go. _The Oncologist._, 2017, 22(12), 1506–1509. 
+
+[13] E. G. Pintelas, T. Kotsilieris, I. E. Livieris, P. Pintelas. In _Proceedings of the 8th International Conference on Software Development and Technologies for Enhancing Accessibility and Fighting Info-exclusion  - DSAI_, 2018, 8–15.

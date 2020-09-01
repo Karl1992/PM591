@@ -1,0 +1,395 @@
+---
+title: "Final project"
+date: Due April 25, 2019
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+<br>
+The final project requires that you build a predictive model based on real data -- your own or the provided National Impatient data-- and a paper-style short report (2-3 of pages long) describing the problem, the approach(es) taken, and the results. Below is a *guideline* structure for the report. You should use the section breakdown into intro, methods, results, conclusions/discussion but don't have to necessarily include every element listed below within those sections. And you may want to include elements not listed below. Use your judgement.
+
+### Introduction
+1. Describe the problem explaining in particular why prediction is of primary interest (inference could also be of interest but there has to be a good reason for wanting to predict a particular outcome)
+
+2. Describe the data (e.g. data source, data collection, outcome of interest, available features, sample size, missing data, etc.)
+
+### Methods
+1. Describe any data pre-processing steps (e.g. cleaning, recoding, variable transformation, dealing with missing data, selection of features to be included in your models, etc)
+```{r}
+setwd("D:/study/MasterinUSC/PM591/final project")
+NIS <- read.csv("NIS2012-200K.csv")
+nis <- NIS
+
+# missing data
+summary(nis)
+
+missing <- numeric()
+for (i in 1:ncol(nis)){
+  missing[i] <- sum(complete.cases(nis[,i]))
+}
+
+colnames(nis)[which(missing != nrow(nis))]
+
+#data cleaning
+
+## tranform variables from numeric to factor
+
+nis$HOSP_NIS=as.factor(nis$HOSP_NIS)
+nis$KEY_NIS=as.factor(nis$KEY_NIS)
+nis$APRDRG_Risk_Mortality=as.factor(nis$APRDRG_Risk_Mortality)
+nis$APRDRG_Severity=as.factor(nis$APRDRG_Severity)
+nis$AGE_NEONATE=as.factor(nis$AGE_NEONATE)
+nis$AMONTH=as.factor(nis$AMONTH)
+nis$AWEEKEND=as.factor(nis$AWEEKEND)
+nis$DIED=as.factor(nis$DIED)
+nis$DQTR=as.factor(nis$DQTR)
+nis$DRGVER=as.factor(nis$DRGVER)
+
+for(i in c(which(colnames(nis) == "CM_AIDS"):which(colnames(nis) == "CM_WGHTLOSS"))){
+  nis[,i]=as.factor(nis[,i])
+}
+
+### since DXCCS and E_CCS are categorical variables, so, change all DXCCS and E_CCS features into category variables
+
+a = which(colnames(nis) == "DXCCS17"); a
+b = which(colnames(nis) == "DXCCS25"); b
+c = which(colnames(nis) == "E_CCS2"); c
+d = which(colnames(nis) == "E_CCS4"); d
+
+for (j in c(a:b, c:d)) {
+  for (i in 1:nrow(nis)){
+  if (is.na(nis[i, j]))
+    {
+    nis[i,j] = " "
+  }
+  }
+  nis[,j]<- as.factor(nis[,j])
+}
+
+A <- which(colnames(nis) == "ELECTIVE"); A
+
+for (i in c(c(which(colnames(nis) == "DX13"):A),c(A:d))) {
+  levels(nis[,i])[1] <- "blank" 
+}
+
+### HCUP_ED: an indicator, changes into factor
+nis[, "HCUP_ED"]<- as.factor(nis[,"HCUP_ED"])
+
+### HOSPBRTH: an indicator, changes into factor
+nis[, "HOSPBRTH"]<- as.factor(nis[,"HOSPBRTH"])
+
+### HOSP_DIVISION: represents area, changes into factor
+nis[, "HOSP_DIVISION"]<- as.factor(nis[,"HOSP_DIVISION"])
+
+### MDC:  Major Diagnostic Categories: are formed by dividing all possible principal diagnoses (from ICD-9-CM) into 25 mutually exclusive diagnosis areas, so MDC, MDC24 and MDC_NoPOA should change into factor
+e = which(colnames(nis) == "MDC"); e
+
+### PR1-PR15, PRCCS1-PRCCS15
+
+for (j in c(e:(e+2))) {
+  nis[, j]<- as.factor(nis[,j])
+}
+
+levels(nis$PR1)[1] <- "blank"
+levels(nis$PR2)[1] <- "blank"
+levels(nis$PR3)[1] <- "blank"
+levels(nis$PR4)[1] <- "blank"
+levels(nis$PR5)[1] <- "blank"
+levels(nis$PR6)[1] <- "blank"
+levels(nis$PR7)[1] <- "blank"
+levels(nis$PR8)[1] <- "blank"
+levels(nis$PR9)[1] <- "blank"
+levels(nis$PR10)[1] <- "blank"
+
+for (i in 1:length(nis$PR11)){
+  if (is.na(nis$PR11[i])){
+    nis$PR11[i] = "blank"
+  }
+}
+nis$PR11 <- as.factor(nis$PR11)
+
+levels(nis$PR12)[1] <- "blank"
+
+for (i in 1:length(nis$PR13)){
+  if (is.na(nis$PR13[i])){
+    nis$PR13[i] = "blank"
+  }
+}
+nis$PR13 <- as.factor(nis$PR13)
+
+for (i in 1:length(nis$PR14)){
+  if (is.na(nis$PR14[i])){
+    nis$PR14[i] = "blank"
+  }
+}
+nis$PR14 <- as.factor(nis$PR14)
+
+for (i in 1:length(nis$PR15)){
+  if (is.na(nis$PR15[i])){
+    nis$PR15[i] = "blank"
+  }
+}
+nis$PR15 <- as.factor(nis$PR15)
+
+levels(nis$PRCCS1)[1] <- "blank"
+levels(nis$PRCCS2)[1] <- "blank"
+levels(nis$PRCCS3)[1] <- "blank"
+levels(nis$PRCCS4)[1] <- "blank"
+levels(nis$PRCCS5)[1] <- "blank"
+levels(nis$PRCCS6)[1] <- "blank"
+levels(nis$PRCCS7)[1] <- "blank"
+levels(nis$PRCCS8)[1] <- "blank"
+levels(nis$PRCCS9)[1] <- "blank"
+levels(nis$PRCCS10)[1] <- "blank"
+
+for (i in 1:length(nis$PRCCS11)){
+  if (is.na(nis$PRCCS11[i])){
+    nis$PRCCS11[i] = "blank"
+  }
+}
+nis$PRCCS11 <- as.factor(nis$PRCCS11)
+
+levels(nis$PRCCS12)[1] <- "blank"
+
+for (i in 1:length(nis$PRCCS13)){
+  if (is.na(nis$PRCCS13[i])){
+    nis$PRCCS13[i] = "blank"
+  }
+}
+nis$PRCCS13 <- as.factor(nis$PRCCS13)
+
+for (i in 1:length(nis$PRCCS14)){
+  if (is.na(nis$PRCCS14[i])){
+    nis$PRCCS14[i] = "blank"
+  }
+}
+nis$PRCCS14 <- as.factor(nis$PRCCS14)
+
+for (i in 1:length(nis$PRCCS15)){
+  if (is.na(nis$PRCCS15[i])){
+    nis$PRCCS15[i] = "blank"
+  }
+}
+
+nis$PRCCS15 <- as.factor(nis$PRCCS15)
+
+nis <- nis[complete.cases(nis$PL_NCHS2006),]
+nis$PL_NCHS2006 <- as.factor(nis$PL_NCHS2006)
+
+## Combine AGE_NEONATE with AGE
+nis$AGE <- as.numeric(levels(nis$AGE)[nis$AGE])
+nis <- nis[complete.cases(nis$AGE),]
+nis$AGE[nis$AGE_NEONATE == 0] <- 0 
+
+nis <- nis[,-which(colnames(nis) == "AGE_NEONATE")]
+
+## Delete missing value
+
+### "AMONTH"37:missing 254
+nis <- nis[complete.cases(nis$AMONTH),]
+summary(nis$AMONTH)
+
+### "AWEEKEND"38:missing 47
+nis <- nis[complete.cases(nis$AWEEKEND),]
+summary(nis$AWEEKEND)
+
+### "DQTR"42:missing 207
+nis <- nis <- nis[complete.cases(nis$DQTR),]
+summary(nis$DQTR)
+
+### RACE
+nis$RACE <- as.numeric(levels(nis$RACE)[nis$RACE])
+nis <- nis[complete.cases(nis$RACE),]
+table(NIS$RACE)
+nis$RACE <- factor(nis$RACE)
+
+# near 4134 totchg unknown
+nis$TOTCHG <- as.numeric(levels(nis$TOTCHG)[nis$TOTCHG])
+nis <- nis[complete.cases(nis$TOTCHG),]
+
+# near 10000 TRAN_IN unknown
+nis <- nis[complete.cases(nis$TRAN_IN),]
+nis$TRAN_IN <- as.factor(nis$TRAN_IN)
+
+
+# near 10000 TRAN_OUT unknown
+nis$TRAN_OUT <- as.factor(nis$TRAN_OUT)
+nis <- nis[complete.cases(nis$TRAN_OUT),]
+
+# Female delete 10 variables
+nis <- nis[-which(nis$FEMALE == ""),]
+
+# Change level " " to level "blank"
+
+for(i in c(which(colnames(nis) == "DX1"):which(colnames(nis) == "DX13"))){
+levels(nis[,i])[1]="blank"
+}
+
+levels(nis$ZIPINC_QRTL)[1] <- "blank"
+
+nis$ORPROC <- as.factor(nis$ORPROC)
+
+nis$NEOMAT <- as.factor(nis$NEOMAT)
+
+nis$NIS_STRATUM <- as.factor(nis$NIS_STRATUM)
+
+# Transform from factor to numeric
+# LOS: Length of stay, should be numeric
+nis$LOS <- as.numeric(levels(nis$LOS)[nis$LOS])
+nis <- nis[complete.cases(nis$LOS),]
+
+# Transform PRDAY1-PRDAY15 to factor
+
+PD_index1 <- which(colnames(nis) == "PRDAY1")
+PD_index15 <- which(colnames(nis) == "PRDAY15")
+for (i in PD_index1:PD_index15) {
+  nis[,i] <- as.numeric(levels(nis[,i])[nis[,i]])
+}
+
+PR <- numeric()
+for (i in 1:length(nis$PRDAY1)) {
+  PR[i] <- 15 - sum(is.na((nis[i,PD_index1:PD_index15])))
+}
+
+nis <- cbind(nis,PR)
+nis <- nis[, -c(PD_index1:PD_index15)]
+
+nis <- nis[,-which(colnames(nis) == "YEAR")]
+
+# What is ran and subselect? delete
+nis <- nis[,-which(colnames(nis) == "ran")]
+nis <- nis[,-which(colnames(nis) == "sub_select")]
+
+# Elective
+nis <- nis[-which(nis$ELECTIVE=="A"),]
+write.csv(nis,file = "D:/study/MasterinUSC/PM591/final project/nis_clean.csv",quote=F,row.name=T,col.names = T)
+# lda, qda, knn, ridge, lasso, random forest, svm, cluster, pca
+```
+
+```{r}
+nis_clean <- read.csv("nis_clean.csv")
+nis_clean <- nis_clean[,-1]
+changing <- c("APRDRG", "APRDRG_Risk_Mortality", "APRDRG_Severity", "CM_AIDS", "CM_ALCOHOL", "CM_ANEMDEF", "CM_ARTH", "CM_BLDLOSS CM_CHF", "CM_CHRNLUNG", "CM_COAG", "CM_DEPRESS", "CM_DM", "CM_DMCX", "CM_DRUG", "CM_HTN_C", "CM_HYPOTHY", "CM_LIVER", "CM_LYMPH", "CM_LYTES", "CM_METS", "CM_NEURO", "CM_OBESE", "CM_DRUG", "CM_HTN_C", "CM_HYPOTHY", "CM_LIVER", "CM_LYMPH", "CM_LYTES", "CM_METS", "CM_NEURO", "CM_PARA", "CM_PERIVASC", "CM_PSYCH", "CM_PULMCIRC", "CM_RENLFAIL", "CM_TUMOR", "CM_ULCER", "CM_VALVE", "CM_WGHTLOSS", "AWEEKEND", "DIED", "AMONTH", "DISPUNIFORM", "DQTR", "DRGVER", "HCUP_ED", "HOSPBRTH", "HOSP_DIVISION", "MDC", "MDC24", "MDC_NoPOA", "TRAN_IN", "TRAN_OUT", "RACE", "PL_NCHS2006", "ORPROC", "NEOMAT", "NIS_STRATUM", "CM_CHF", "CM_BLDLOSS", "DRG", "DRG24", "PR", "DRG_NoPOA")
+for (i in changing) {
+  nis_clean[,colnames(nis_clean) == i] <- as.factor(nis_clean[,colnames(nis_clean) == i])
+}
+```
+
+```{r}
+nis_clean_new <- nis_clean[,c("AGE", "FEMALE", "RACE", "HOSPBRTH", "PL_NCHS2006", "ZIPINC_QRTL", "AMONTH", "AWEEKEND", "ELECTIVE", "LOS", "TRAN_IN", "CM_AIDS", "CM_ALCOHOL", "CM_ANEMDEF", "CM_ARTH", "CM_BLDLOSS",	"CM_CHF",	"CM_CHRNLUNG", "CM_COAG", "CM_DEPRESS", "CM_DM",	"CM_DMCX", "CM_DRUG", "CM_HTN_C",	"CM_HYPOTHY",	"CM_LIVER", "CM_LYMPH",	"CM_LYTES", "CM_METS", "CM_NEURO", "CM_OBESE", "CM_PARA", "CM_PERIVASC", "CM_PSYCH", "CM_PULMCIRC",	"CM_RENLFAIL", "CM_TUMOR", "CM_ULCER", "CM_VALVE",	"CM_WGHTLOSS", "NEOMAT", "APRDRG_Risk_Mortality", "APRDRG_Severity", "MDC", "NDX", "ORPROC", "NCHRONIC", "NECODE", "HCUP_ED", "NPR", "HOSP_DIVISION", "NIS_STRATUM", "PAY1", "TOTCHG","DIED")]
+
+# dispuniform include "died" "tran-out" "dqtr"
+HOSP_CONTROL <- numeric()
+HOSP_LOCTEACH <- numeric()
+HOSP_BEDSIZE <- numeric()
+for (i in 1:length(nis_clean_new$NIS_STRATUM)) {
+  inter <- strsplit(as.character(nis_clean_new$NIS_STRATUM[i]), split = "")[[1]]
+  HOSP_CONTROL[i] <- as.numeric(inter[2])
+  HOSP_LOCTEACH[i] <- as.numeric(inter[3])
+  HOSP_BEDSIZE[i] <- as.numeric(inter[4])
+}
+nis_clean_new <- nis_clean_new[,-which(colnames(nis_clean_new) == "NIS_STRATUM")]
+HOSP_CONTROL <- as.factor(HOSP_CONTROL)
+HOSP_LOCTEACH <- as.factor(HOSP_LOCTEACH)
+HOSP_BEDSIZE <- as.factor(HOSP_BEDSIZE)
+nis_clean_new <- cbind(nis_clean_new, HOSP_CONTROL, HOSP_LOCTEACH, HOSP_BEDSIZE)
+
+# write.csv(nis_clean_new,file = "D:/study/MasterinUSC/PM591/final project/nis_clean_new.csv",quote=F,row.names = F, col.names = F)
+```
+
+```{r}
+library(mlr)
+library(fastDummies)
+set.seed(20190421)
+
+# Set dummy varaibles
+nis_dummy <- dummy_cols(nis_clean_new[,-which(colnames(nis_clean_new) == "DIED")])[,-c(1:ncol(nis_clean_new))]
+
+for (i in 1:ncol(nis_clean_new)) {
+  name <- colnames(nis_clean_new)[i]
+  if (is.numeric(nis_clean_new$name)){
+   nis_dummy <- cbind(nis_dummy, nis_clean_new[,i]) 
+  }
+}
+nis_dummy <- cbind(nis_dummy, nis_clean_new$DIED)
+
+for (i in 1:ncol(nis_dummy)) {
+  newname <- strsplit(colnames(nis_dummy)[i], "_")[[1]]
+  colnames(nis_dummy)[i] <- paste(newname[1:length(newname)], collapse = "")
+}
+colnames(nis_dummy)[ncol(nis_dummy)] <- "DIED"
+
+# Split data
+nis_tsk <- makeClassifTask(id = "NIS", data = nis_dummy, target = "DIED")
+split_desc <- makeResampleDesc(method = 'Holdout', stratify = T, split = 0.7)
+split <- makeResampleInstance(split_desc, task = nis_tsk)
+nis_tsk_train <- split$train.inds[[1]]
+nis_tsk_test <- split$test.inds[[1]]
+```
+
+```{r}
+# KNN
+set.seed(20190421)
+Kvals <- makeParamSet(makeDiscreteParam("k", values = 1:30))
+nis_CV <- makeResampleDesc("CV", iters = 10L, stratify=TRUE)
+ctrl <- makeTuneControlGrid()
+nis_knn_tune <- tuneParams("classif.knn", subsetTask(nis_tsk, subset = nis_tsk_train), resampling = nis_CV, par.set = Kvals, control = ctrl, measures = auc)
+
+nis_knn_learner <- makeLearner("classif.knn", id = "nis knn", fix.factors.prediction = T, k = nis_knn_tune$x$k)
+nis_knn <- train(nis_knn_learner, task = nis_tsk, subset = nis_tsk_train)
+
+nis_knn_perdict <- predict(nis_knn, newdata = nis_dummy[nis_tsk_test,])
+calculateConfusionMatrix(nis_knn_perdict)
+performance(nis_knn_predict, measures = list(auc, mmce))
+```
+
+```{r}
+# LDA
+nis_lda_tsk <- makeClassifTask(id = "nis lda", data = nis_dummy, target = "DIED")
+nis_lda_learner <- makeLearner("classif.lda", fix.factors.prediction = T, predict.type = "prob")
+nis_lda_cv <- crossval(nis_lda_learner, nis_lda_tsk, iters = 10L, stratify = T, measures = list(auc,mmce))
+
+nis_lda <- train(nis_lda_learner, nis_lda_tsk)
+nis_lda_predict <- predict(nis_lda, newdata = nis_dummy[nis_tsk_test,])
+calculateConfusionMatrix(nis_lda_predict)
+performance(nis_lda_predict, measures = list(auc, mmce))
+nis_lda_predict_final <- generateThreshVsPerfData(nis_lda_predict, measures = auc)
+plotROCCurves(nis_lda_predict_final, measures = list(auc,mmce))
+```
+
+
+2. Briefly describe the Machine learning methods you will be using and why they are appropriate for your data (e.g. given the sample size and dimensionality of your training data, are you more concerned about bias or variance?)  You should try and compare at least 3 distinct appropriate methods.
+
+3. Describe how you are splitting the data into testing and training and any resampling strategy used for comparing methods, tuning parameters, and/or model/feature selection.
+
+4. If applicabble, describe any model/feature selection used. 
+
+4. If applicabble, describe any tuning parameters and how you will be tuning them. 
+
+5. Describe what performance metric(s) you will be using and why.
+
+```{r}
+count <- 0
+for (i in 1:length(nis_clean$DX1)){
+  if(nis_clean$DX1[i] == nis_clean$DX2[i] & nis_clean$DX1[i] != "blank"){
+    count <- count + 1
+    print(i)
+  }
+}
+count
+```
+### Results
+1. Present key summaries (table and/or plots, but plots prefered when both available) of your data (e.g. class frequencies if a classification problem)
+
+2. Report training, validation/cross-validation, and test errors. Present cross-validation plots for tuning parameters if available. Report variable importance (e.g. p-values, model coefficients, Random forest and boosting variable importance).
+
+### Conclusions/discussion
+Discuss whether and why the prediction model(s) developed achieved sufficient high accuracy to be usefully deployed to predict new observations.
+
+
+#Additional notes for those using the NIS data
+The data provided consists of a random subset of 200,000 patients from 2012 from the National Impatient Sample (NIS) data collected by the Healthcare Cost and Utilization Project (HCUP). You can find information on the HCUP database at <https://www.hcup-us.ahrq.gov>. You can choose to develop a model to predict death during hospitalization also known as impatient mortality (variable DIED in the dataset) or hospital length of stay (variable LOS in the dataset). For extra credit, you can also choose to predict both. The dataset has a relatively large number of variables. In the provided data dictionary I preselected variables (highlighted) which are both availabe (not all variables in the dictionary are available for 2012) which might be relevant for predicting impatient mortality and/or hospital length of stay. Based on their description and additional info from the HCUP site you should choose which variables among the preselected ones you will consider as features/predictors. You don't have to use them all. There maybe variables that are redundant (capture pretty much the same info others already capture), variables that are too complex (e.g. categorical with way too many levels), or that based on your judgment are unlikely to be important. Be aware that the data is real and has not been pre-processed in any way and you will have to do some data cleaning. For example, you should carefully check the variables you consider as possible predictors for correctness of type (e.g. many numeric variables will be read in as factor variables when you use ``read.csv``), outliers, missing observations, nonsensical values, etc. 
+

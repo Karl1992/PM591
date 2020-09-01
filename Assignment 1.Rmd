@@ -1,0 +1,415 @@
+---
+title: "PM 591 -- Machine Learning for the Health Sciences."
+author: "Chao XIA"
+date: "01/28/2019"
+output:
+  html_document:
+    df_print: paged
+  pdf_document:
+    includes:
+      in_header: header.tex
+    keep_tex: yes
+    latex_engine: xelatex
+---
+### Analysis
+
+1. Re-analysis of the brain weight data.
+    a. Read in (``red.table``) the Brain weight dataset. Examine (``head``) and summarize (``summary``) the data.
+    b. Convert Sex and Age to factor variables so that ``lm`` can properly deal with them.
+    c. Split the data into training (70%) and test (30%) sets. (set the seed with ``set.seed(2018)`` for reproducibility)
+    d. Fit a linear regression model with brain weight as the outcome and head size, Sex, and Age as predictors. What is the interpretation of the coefficients for Sex and Age? Compute the training and test RMSE and $R^2$. Does adding Age improves *prediction performance* over the model with Sex and head size alone?
+    e. Explore whether fitting a linear regression model with separate intercepts and separate slopes for 20 $\le$ Age $<$ 46 and Age $\ge$ 46 improves prediction performance over the model ``Brain.weight ~ Age + Brain.size`` (hint: you can specify an interaction between Sex and Head size by including `` Head.Size:Age`` in the model formula. 
+    f. Compare your results from e. to fitting two separate models: ``Brain.weight ~ Age + Brain.size`` for individuals 20 $\le$ Age $<$ 46 and `Brain.weight ~ Age + Brain.size`` for individuals Age $\ge$ 46. Is this equivalent to the single model you fitted in e.? Explain (hint: think about the residual sum of squares being minimized in each case to obtain the model coefficients). 
+
+```{r}
+setwd("D:/study/MasterinUSC/PM591/week2/homework")
+brain <- read.table("brain.txt", header = T) # read the dataset
+head(brain)
+summary(brain)
+```
+
+```{r}
+brain$Sex <- factor(brain$Sex, levels = 1:2, labels = c('males','females'))
+brain$Age <- factor(brain$Age, levels = 1:2, labels = c('20~46','46+')) # covert Sex and Age to factor
+```
+
+```{r}
+set.seed(2018)
+n <- nrow(brain)
+trainset <- sample(1:n, floor(0.7 * n))
+brain_train <- brain[trainset,]
+brain_test <- brain[-trainset,] # Split the data into training and test sets
+```
+```{r}
+brain_lm <- lm(Brain.weight ~ Sex + Age + Head.size, data = brain_train)
+summary(brain_lm) #Fit a linear regression model
+```
+The linear regression model is $Brain.weight = 467.85072 - 19.93275 * Sex - 23.32837 * Age + 0.23016 * Head.size$
+
+The predicted brain weight of males is 19.93275g heavier than that of females.
+
+The predicted brain weight of people aged between 20 to 46 is 23.32837 heavier than that of people aged older than 46.
+
+```{r}
+RSS_train <- sum(residuals(brain_lm)^2)
+TSS_train <- sum((brain_train$Brain.weight - mean(brain_train$Brain.weight))^2)
+RMSE_train <- sqrt(RSS_train / nrow(brain_train))
+R2_train <- 1- RSS_train / TSS_train #Compute the training RMSE and R^2
+
+predict_test <- predict(brain_lm, newdata = brain_test)
+RSS_test <- sum((brain_test$Brain.weight - predict_test)^2)
+TSS_test <- sum((brain_test$Brain.weight - mean(brain_test$Brain.weight))^2)
+RMSE_test <- sqrt(RSS_test / nrow(brain_train))
+R2_test <- 1- RSS_test/TSS_test #Compute the test RMSE and R^2
+
+cat("\nThe RMSE of train set is", RMSE_train)
+cat("\nThe R^2 of train set is", R2_train)
+cat("\nThe RMSE of test set is", RMSE_test)
+cat("\nThe R^2 of test set is", R2_test)
+```
+Using the same seed, for previous fit model, the $R^2$ of train set is 0.6207315 and the $R^2$ of test set is 0.6742505. In such case, adding the predictor age makes the fit model slightly better than that without age.
+
+```{r}
+brain_lmold <- lm(Brain.weight ~ Age + Head.size, data = brain_train)
+brain_lmnew <- lm(Brain.weight ~ Age + Head.size + Head.size:Age, data = brain_train)
+summary(brain_lmold)
+summary(brain_lmnew) #fitting the new linear regression model
+```
+The linear regression model without interaction is $Brain.weight = 406.30998 - 20.91315 * Age + 0.24423 * Head.size$
+
+The linear regression model with interaction is 
+
+$Brain.weight = 485.81016 - 163.91256 * Age + 0.22260 * Head.size + 0.03923 * Head.size * Age$
+
+```{r}
+RSS_trainold <- sum(residuals(brain_lmold)^2)
+RMSE_trainold <- sqrt(RSS_trainold / nrow(brain_train))
+R2_trainold <- 1- RSS_trainold / TSS_train #Compute the training RMSE and R^2
+
+predict_testold <- predict(brain_lmold, newdata = brain_test)
+RSS_testold <- sum((brain_test$Brain.weight - predict_testold)^2)
+RMSE_testold <- sqrt(RSS_testold / nrow(brain_train))
+R2_testold <- 1- RSS_testold /TSS_test #Compute the test RMSE and R^2
+
+cat("\nThe RMSE of train set is", RMSE_trainold)
+cat("\nThe R^2 of train set is", R2_trainold )
+cat("\nThe RMSE of test set is", RMSE_testold)
+cat("\nThe R^2 of test set is", R2_testold)
+```
+```{r}
+RSS_trainnew <- sum(residuals(brain_lmnew)^2)
+RMSE_trainnew <- sqrt(RSS_trainnew / nrow(brain_train))
+R2_trainnew <- 1- RSS_trainnew / TSS_train #Compute the training RMSE and R^2
+
+predict_testnew <- predict(brain_lmnew, newdata = brain_test)
+RSS_testnew <- sum((brain_test$Brain.weight - predict_testnew)^2)
+RMSE_testnew <- sqrt(RSS_testnew / nrow(brain_train))
+R2_testnew <- 1- RSS_testnew/TSS_test #Compute the test RMSE and R^2
+
+cat("\nThe RMSE of train set is", RMSE_trainnew)
+cat("\nThe R^2 of train set is", R2_trainnew )
+cat("\nThe RMSE of test set is", RMSE_testnew)
+cat("\nThe R^2 of test set is", R2_testnew)
+```
+For train set, considering the interaction between age and headsize makes the fit model slightly better than that without interaction, but on the contrary, for test set, considering the interaction between age and headsize makes the fit model slightly worse than that without interaction.
+
+```{r}
+old_set_train <- which(brain_train$Age == '46+')
+old_set_test <- which(brain_test$Age == '46+')
+brain_old_train <- brain_train[old_set_train,]
+brain_young_train <- brain_train[-old_set_train,]
+brain_old_train$Age <- as.numeric(brain_old_train$Age)
+brain_young_train$Age <- as.numeric(brain_young_train$Age)
+
+brain_lm_old <- lm(Brain.weight ~ Head.size + Age, data = brain_old_train)
+brain_lm_young <- lm(Brain.weight ~ Head.size + Age, data = brain_young_train)
+
+summary(brain_lm_old)
+summary(brain_lm_young)
+```
+The two seperate models are equivalent to the single model you fitted in e.
+
+$$\begin{split}
+&The\ linear\ regression\ model\ with\ interaction\ is \\
+&Brain.weight = 485.81016 - 163.91256 * Age + 0.22260 * Head.size + 0.03923 * Head.size * Age\\
+&The\ two\ seperate\ models\ are\\
+&Brain.weight.young = 485.81016 + 0.22260 * Head.size\\
+&Brain.weight.old = 321.89760 + 0.26183 * Head.size
+\end{split}$$
+
+Considering the difference of age, when age is 46+, it is represented by 0. At the same time, when age is 20~46, it is represented by 1.
+
+In such case, we can analyze the model with interaction like this:
+
+$$\begin{split}
+When\ age\ is\ &46+,\ age = 0.\ We\ can\ rewrite\ the\ model\ as\\
+Brain.weight &= 485.81016 - 163.91256 * Age + 0.22260 * Head.size + 0.03923 * Head.size * Age\\
+&=485.81016 + 0.22260 * Head.size = Brain.weight.old\\
+When\ age\ is\ &20-46,\ age = 1.\ We\ can\ rewrite\ the\ model\ as\\
+Brain.weight &= 485.81016 - 163.91256 * Age + 0.22260 * Head.size + 0.03923 * Head.size * Age\\
+&=485.81016 + - 163.91256 + 0.22260 * Head.size + 0.03923 * Head.size = Brain.weight.young\\
+Proved
+\end{split}$$
+
+2. Write and R function ``Rsq`` to compute $R^2$. The function shoud take two vector arguments ``observed`` and ``predicted`` and return $R^2$.  Can you use ``Rsq`` to compute training and test $R^2$s?
+
+```{r}
+rsq <- function(observed, predicted){
+  RSS <- sum((observed - predicted)^2)
+  TSS <- sum((observed - mean(observed))^2)
+  R2 <- 1 - RSS / TSS
+  return(R2)
+}
+
+rsme <- function(observed, predicted){
+  RSME <- sqrt(sum((observed - predicted)^2)/length(observed))
+  return(RSME)
+}
+
+rsq(brain_test$Brain.weight, predict_test)
+rsq(brain_test$Brain.weight, predict_testold)
+rsq(brain_test$Brain.weight, predict_testnew)
+```
+
+3. Percent of body fat is a health indicator that can be measured by relatively costly methods such as underwater weighing (gold-standard) and dual energy x-ray absortiometry. ([You can check here to learn more about body fat and its importance](http://halls.md/body-fat-percentage-formula/)) The goal of this Lab problem is to develop a model for predicting body fat based on readily available features like BMI, sex and age without requiring involved and costly measurements. 
+    a. Load the body fat data (posted on blackboard) using the ``read.csv`` funtion. ``read.csv`` works just like ``read.table`` but reads comma delimited files instead. Make sure you use the ``header = TRUE`` option to read in the variable names in the first row of the file.
+    b. Check the structure of the body fat data with ``head().`` Notice that there are missing values denoted as ``NA``.
+    c. For this Lab you will only use the 4 variables: total percent body fat (``dxdtopf``), gender (``riagendr``), age in years (``ridageyr``), and body mass index BMI (``bmxbmi``). Create a new data.frame ``body.fat4`` with just these four variables. Hint: you can extract named columns/variables from a data frame as follows: ``your.data.frame[, c('dxdtopf', 'riagendr', 'ridageyr', 'bmxbmi')]``
+    d. Rename the variables to ``body.fat``, ``sex``, ``age``, and ``bmi``. Hint: you can use: ``colnames(body.fat4) <- c('body.fat', 'sex', 'age', 'bmi')``
+    e. Recode `sex` as a factor variable (1=Male 2=Female) using ``factor``.
+    f. How many observations/rows are there with no missing values in *any* of the 4 variables (complete cases). Hint: use the `complete.cases` function.
+    g. Remove any incomplete cases. Hint: this is equivalent to retaining only the complete cases.
+    h. Split the data into a training (60%), validation (20%), and testing set (20%) (set the seed with ``set.seed(2018)`` so the split can be reproduced.)
+    i. Fit the linear model ``body.fat ~ bmi`` using the training set. Compute the training and validaion RMSE and  $R^2$ using the ``rmse`` function from the lecture and the ``Rsq`` function you wrote.
+    j. Repeat i. for models with the following predictors:
+        + ``bmi``, ``age``, ``sex``
+        + ``bmi``, ``bmi^2``, ``age``, ``age^2``, ``sex``. (Remember you need to enclose in transformed variables with ``I()``, e.g. ``I(bmi^2)``). Would it make sense to include ``sex^2``?
+      Which model would you choose? Compute final estimates of predicion performance for your selected model using the test data.
+    k. The body fat data in this Lab is from US individuas. Comment on applying your selected model to predict/estimate % body fat in a different population (e.g. Asia, Latin America)
+    l. The following prediction formulas for body fat were developed by Deurenberg et. al (Br J Nutr. 1991 Mar;65(2):105-14) based on N=1,229 Dutch subjects:
+
+- $$\text{Child body fat percent} = 1.4 + 1.51 \times \mathrm{BMI} - 0.70 \times \mathrm{Age} - 3.6 \times \mathrm{Sex} $$ 
+
+    + for children aged 15 or less and
+    
+- $$\text{Adult body fat percent} = -5.4 + 1.20 \times \mathrm{BMI} + 0.23 \times \mathrm{Age} - 10.8 \times \mathrm{Sex} $$
+
+    + for adolescents and adults 16 year of age or older, where
+ 
+- $$\text{Sex} = \begin{cases}
+  0 & \text{if} \;\, \text{female}\\
+  1 & \text{if} \;\, \text{male}\end{cases}$$
+
+- Use these formulas to predict body fat percentage in your testing set and estimate the prediction metrics (RMSE and $R^2$). Compare the quality of ths prediction to that of the selected model in j. above.
+    
+```{r}
+body_fat <- read.csv("bodyfat.csv", header = T)
+
+head(body_fat)
+
+body_fat_4 <- body_fat[, c('dxdtopf', 'riagendr', 'ridageyr', 'bmxbmi')]
+
+colnames(body_fat_4) <- c('body.fat', 'sex', 'age', 'bmi')
+
+body_fat_4$sex <- factor(body_fat_4$sex, levels = 1:2, labels = c('males','females'))
+
+N <- sum(complete.cases(body_fat_4))
+
+body_fat_4 <- body_fat_4[complete.cases(body_fat_4),]
+
+set.seed(2018)
+training_set <- sample(1:N, floor(0.6*N))
+body_fat_4_train <- body_fat_4[training_set,]
+body_fat_4_remain <- body_fat_4[-training_set,]
+Nr <- dim(body_fat_4_remain)[1]
+validation_set <- sample(1:Nr, 0.5*Nr)
+body_fat_4_val <- body_fat_4_remain[validation_set,]
+body_fat_4_test <- body_fat_4_remain[-validation_set,]
+
+lm1 <- lm(body.fat ~ bmi, data = body_fat_4_train)
+
+RSME_BF_Train <- sqrt(sum(residuals(lm1)^2)/nrow(brain_train))
+R2_BF_Train <- 1 - sum(residuals(lm1)^2)/sum((body_fat_4_train$body.fat - mean(body_fat_4_train$body.fat))^2)
+
+predict_val <- predict(lm1, newdata = body_fat_4_val)
+RSME_BF_val <- rsme(body_fat_4_val$body.fat,predict_val)
+R2_BF_val <- rsq(body_fat_4_val$body.fat,predict_val)
+
+cat("\nThe RSME of training group is", RSME_BF_Train, ", while the RSME of validation group is", RSME_BF_val, ".", "\nThe R^2 of training group is", R2_BF_Train, ", while the R^2 of validation group is", R2_BF_val, ".")
+```
+```{r}
+lm2 <- lm(body.fat ~ bmi + age + sex, data = body_fat_4_train)
+
+RSME_BF_Train <- sqrt(sum(residuals(lm2)^2)/nrow(brain_train))
+R2_BF_Train <- 1 - sum(residuals(lm2)^2)/sum((body_fat_4_train$body.fat - mean(body_fat_4_train$body.fat))^2)
+
+predict_val <- predict(lm2, newdata = body_fat_4_val)
+RSME_BF_val <- rsme(body_fat_4_val$body.fat,predict_val)
+R2_BF_val <- rsq(body_fat_4_val$body.fat,predict_val)
+
+cat("\nThe RSME of training group is", RSME_BF_Train, ", while the RSME of validation group is", RSME_BF_val,".",
+"\nThe R^2 of training group is", R2_BF_Train, ", while the R^2 of validation group is", R2_BF_val,".")
+```
+```{r}
+lm3 <- lm(body.fat ~ bmi + I(bmi^2) + age + I(age^2) + sex, data = body_fat_4_train)
+
+RSME_BF_Train <- sqrt(sum(residuals(lm3)^2)/nrow(brain_train))
+R2_BF_Train <- 1 - sum(residuals(lm3)^2)/sum((body_fat_4_train$body.fat - mean(body_fat_4_train$body.fat))^2)
+
+predict_val <- predict(lm3, newdata = body_fat_4_val)
+RSME_BF_val <- rsme(body_fat_4_val$body.fat,predict_val)
+R2_BF_val <- rsq(body_fat_4_val$body.fat,predict_val)
+
+cat("\nThe RSME of training group is", RSME_BF_Train, ", while the RSME of validation group is", RSME_BF_val,".",
+"\nThe R^2 of training group is", R2_BF_Train, ", while the R^2 of validation group is", R2_BF_val,".")
+```
+It is not necessary to include sex^2 since sex is a binary variable with value of 0 and 1, which means sex and sex^2 will be the same variable.
+
+This model can't be used to predict and estimate a different population people, since in other population, the distribution of age, sex, bmi and body fat will be different because of different climate, habits and diet.
+
+```{r}
+predict_BF_test1 <- predict(lm1, newdata = body_fat_4_test)
+RSME_BF_test1 <- rsme(body_fat_4_test$body.fat,predict_BF_test1)
+R2_BF_test1 <- rsq(body_fat_4_test$body.fat,predict_BF_test1)
+
+predict_BF_test2 <- predict(lm2, newdata = body_fat_4_test)
+RSME_BF_test2 <- rsme(body_fat_4_test$body.fat,predict_BF_test2)
+R2_BF_test2 <- rsq(body_fat_4_test$body.fat,predict_BF_test2)
+
+predict_BF_test3 <- predict(lm3, newdata = body_fat_4_test)
+RSME_BF_test3 <- rsme(body_fat_4_test$body.fat,predict_BF_test3)
+R2_BF_test3 <- rsq(body_fat_4_test$body.fat,predict_BF_test3)
+
+cat("\nThe RSME of test group for first model is", RSME_BF_test1, ", while the R^2 of test group for first model is", R2_BF_test1,".")
+cat("\nThe RSME of test group for second model is", RSME_BF_test2, ", while the R^2 of test group for second model is", R2_BF_test2,".")
+cat("\nThe RSME of test group for third model is", RSME_BF_test3, ", while the R^2 of test group for third model is", R2_BF_test3,".")
+```
+Since the $R^2$s of valiation of three models are almost the same, I compare the $R^2$s of test of three models. After comparing the RSME and R^2 of three test model, I will choose the second model.
+
+```{r}
+body_fat_4_test_new <- body_fat_4_test
+body_fat_4_test_new$sex <- body_fat_4_test_new$sex=='males'
+body_fat_4_test_C <- body_fat_4_test_new[which(body_fat_4_test_new$age < 16),]
+body_fat_4_test_A <- body_fat_4_test_new[-which(body_fat_4_test_new$age < 16),]
+
+predict_BF_test_C <- 1.4 + 1.51 * body_fat_4_test_C$bmi - 0.70 * body_fat_4_test_C$age - 3.6 * body_fat_4_test_C$sex
+predict_BF_test_A <- -5.4 + 1.20 * body_fat_4_test_A$bmi  + 0.23 * body_fat_4_test_A$age - 10.8 * body_fat_4_test_A$sex
+
+RSME_BF_C <- rsme(body_fat_4_test_C$body.fat,predict_BF_test_C)
+R2_BF_C <- rsq(body_fat_4_test_C$body.fat,predict_BF_test_C)
+RSME_BF_A <- rsme(body_fat_4_test_A$body.fat,predict_BF_test_A)
+R2_BF_A <- rsq(body_fat_4_test_A$body.fat,predict_BF_test_A)
+
+cat("\nThe RSME of test group for children is", RSME_BF_C, ", while the R^2 of test group for children is", R2_BF_C,".")
+cat("\nThe RSME of test group for adolscents and adults is", RSME_BF_A, ", while the R^2 of test group for adolscents and adults is", R2_BF_A,".")
+```
+The prediction is quite poor using the model. It is because that we are using model of Dutch people to predict body fat of American people.
+
+4. Repeat steps h-j using a different random split (set the seed to a different value) into training (60%), validation (20%), and testing set (20%). Do you get similar results? Do you choose the same model? Are the final test prediction metrics (RMSE and $R^2$ similar)?. Comment on the reliability of spliting the data into training, validation, and test to perform model selection when you have a modest sample size. (Note: we'll learn about cross validation, an alternative approach for model selection later in the couse.)
+
+
+### Simulation
+1. You will perform a small simulation study to investigate the degree to which assessing prediction performance in *the same data* used to train/fit a model -- rather than using a separate test dataset -- leads to an overly optimistic assessment of prediction performance. Of particular interest is to investigate how the degree of overoptimistic assessment is affected by i) the size of the training data and ii) the level of noise in the data. The simulation will loosely mimic the brain weight data.
+    a. Set the training sample size to ``n_train=100``, the test sample size to ``n_test=50``, and the total sample size to ``n = n_train + n_test = 150`` (the train/test split is 2/3 train to 1/3 test rather than the more usual 0.8 to 0.2 to prevent the test set from being too small).
+    b. Generate a variable/vector ``Head.size`` of size ``n`` drawn from a normal distribution with population mean and population standard deviations equal to the sample mean and sample standard deviation, respectively, of the Head.Size variable in the real brain weight data.
+    c. Generate a binary variable/vector ``Sex``= Female/Male of size ``n`` with a population frequency of Sex==Female/Male matching the observed frequencies of the variable Sex in the real brain weight data (hint: use ``rbinom`` to generate samples form a binomial distribution: ``rbinom(n, size=1, prob=Malefreq)``, where ``Malefreq`` was prevously computed).
+    d. Similarly, generate a binary variable/vector ``Age``= <= 46/ > 46 with population freqiencies for <= 46 and > 46 matching the observed frequencies of the variable Age in the the real brain weight data.
+    e. Generate a variable/vector ``Brain.weight`` of size ``n`` according to the linear model ``Brain.weight = b0 + ba * Age + bs * Sex + bh * Head.size``. Use the coefficients $\widehat{\beta_0}, \widehat{\beta_{A}},  \widehat{\beta_{S}}$, and $\widehat{\beta_{H}}$ obtained from fitting the corresponding linear regression model to the full real brain weight dataset. 
+    f. Generate a noise/error vector ``noise`` of size ``n`` drawn from a normal distribution with mean 0 and variance equal to that of the residual variance in the linear regression model fitted above on the full real brain weight dataset. Add the noise to Brain.weight: ``Brain.weight = Brain.weight + noise``.
+    g. Construct a dataframe containg the generated variables ``Sex``, ``Age``, ``Brain.weight``, and ``Head.size``.
+    h. Split the data into training (``size n_train``) and test (``size n_test``) sets.
+    i. Fit the model ``Brain.weight ~ b0 + ba * Age + bs * Sex + bh * Head.size`` to the training data.
+    j. Compute the training and test RMSE and $R^2$.
+    k. Repeat steps 2 to 10 100 times (save the RMSE's and $R^2$'s from each simulation eplicate).
+    l. Compute the average training and test RMSE ($R^2$) across the 100 simulation replicates. 
+    m. Visually (e.g. scatter plot, boxplot) evaluate the degree of optimistic assessment when training and testing on the same data.
+    n. Comment on the results of the simulation.
+    o. Investigate how the results change as: 
+        i. ``n_train`` gets larger (say ``n_train=300`` and ``n_train=1000``) and
+        ii. the standard deviation of the noise variable ``noise`` gets larger (say 1.5- and 2-fold lager than in the baseline simulation). Summarize and comment on your results.
+        
+```{r}
+set.seed(2018)
+n_train <- 100
+n_test <- 50
+n <- n_train + n_test
+Malefreq <- sum(brain$Sex == 'males')/nrow(brain)
+Pa <- sum(brain$Age == '20~46')/nrow(brain)
+```
+```{r}
+RR_stimulation <- function(n_train, x){
+  RR_train <- numeric()
+  RMSE_train <- numeric()
+  RR_test <- numeric()
+  RMSE_test <- numeric()
+  n <- n_train + n_test
+  for ( i in 1:100){
+    Head.size <- rnorm(n, mean(brain$Head.size), sqrt(var(brain$Head.size)))
+    Sex <- rbinom(n, size = 1, prob = Malefreq) + 1
+    Age <- rbinom(n, size = 1, prob = Pa) + 1
+    Sdata <- data.frame(cbind(Sex, Age, Head.size))
+
+    Sdata$Sex <- factor(Sdata$Sex, levels = 1:2, labels = c('females', 'males'))
+    Sdata$Age <- factor(Sdata$Age, levels = 1:2, labels = c('46+', '20~46'))
+
+    Brain.weight<- predict(brain_lm, newdata = Sdata)
+    noise <- rnorm(n,0,x * sqrt(var(residuals(brain_lm))))
+    Brain.weight <- Brain.weight + noise
+
+    Sdata <- cbind.data.frame(Sdata, Brain.weight)
+
+    trainsets <- sample(1:n, n_train)
+    Sdata_train <- Sdata[trainsets,]
+    Sdata_test <- Sdata[-trainsets,]
+    Sdata_train <- data.frame(Sdata_train)
+    Sdata_test <- data.frame(Sdata_test)
+
+    Sdata_lm <- lm(Brain.weight ~ Age + Sex + Head.size,data = Sdata_train)
+
+    RSS_train <- sum(residuals(Sdata_lm)^2)
+    TSS_train <- sum((Sdata_train$Brain.weight - mean(Sdata_train$Brain.weight))^2)
+    RR_train[i] <- 1 - RSS_train/TSS_train
+    RMSE_train[i] <- sqrt(RSS_train / n_train)
+
+    Predict_Sdata_test <- predict(Sdata_lm, newdata = Sdata_test)
+    RSS_test <- sum((Sdata_test$Brain.weight - mean(Sdata_test$Brain.weight))^2)
+    RR_test[i] <- rsq(Sdata_test$Brain.weight, Predict_Sdata_test)
+    RMSE_test[i] <- sqrt(RSS_test / n_test)
+  }
+
+  avrRR_train <- mean(RR_train)
+  avrRMSE_train <- mean(RMSE_train)
+  avrRR_test <- mean(RR_test)
+  avrRMSE_test <- mean(RMSE_test)
+
+  cat("\navrRR_train is", avrRR_train)
+  cat("\navrRMSE_train is", avrRMSE_train)
+  cat("\navrRR_test is", avrRR_test)
+  cat("\navrRMSE_test is", avrRMSE_test)
+  par(mar=c(6,7,1,1))
+  plot(RR_test, pch=16, col='red4', cex=2, cex.lab=2, ylab='R^2')
+  points(RR_train, pch=16, col='steelblue', cex=2)
+  abline(h=avrRR_train, col='steelblue', lwd=3)
+  abline(h=avrRR_test, col='red4', lwd=3)
+  boxplot(c(RR_test, RR_train) ~ rep(c('Test R^2', 'Train R^2'), each=100), pch=16, col='steelblue1', cex=2, cex.axis=2, cex.lab=2)
+}
+```
+```{r}
+RR_stimulation(100,1)
+```
+The average $R^2$ of test is lower than that of train, while the variance of test $R^2$ is larger than variance of train $R^2$.
+
+```{r}
+RR_stimulation(300,1)
+```
+```{r}
+RR_stimulation(1000,1)
+```
+```{r}
+RR_stimulation(100,1.5)
+```
+```{r}
+RR_stimulation(100,2)
+```
+
+When n_train becomes bigger, the fit model is slightly better than less n_train. But if the variance of noise becomes larger, the fit model is much more worse than less variance.

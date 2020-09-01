@@ -1,0 +1,436 @@
+---
+title: "PM 591 -- Machine Learning for the Health Sciences."
+author: "Assignment 2"
+date: "Due 2/14/2019"
+output:
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+<br>
+
+### Analysis
+
+1.  Brain weight data. 
+    a. Using the function ``KNN.reg`` in the ``FNN`` package to construct predictive models for brain weight using KNN regression for $K=1,..,15$ on a training set (use the exact same training/validation split--same seed and same split percentages--you used for linear regression). Hint: use a for loop to iterate over $K$.
+    b. Plot the validation RMSE as a function of $K$ and select the best K.
+    c. Using the validation RMSE compare to the best linear regression model from homework 1. Is there an improvement in prediction performance?  Interpret your results based on the bias-variance tradeoff.
+```{r}
+# Install FNN package
+library("FNN")
+```
+    
+```{r}
+setwd("D:/study/MasterinUSC/PM591/week2/homework")
+brain <- read.table("brain.txt", header = T)
+```
+```{r}
+set.seed(2018)
+n <- nrow(brain)
+training_set <- sample(1:n, floor(0.7 * n))
+brain_train <- brain[training_set,]
+brain_val <- brain[-training_set,]
+
+```
+
+```{r}
+k_number <- c(1:15)
+RMSE <- numeric()
+for (i in k_number){
+  fit_lNN <- knn.reg(train = brain_train[,-4], test = brain_val[,-4], y = brain_train$Brain.weight, k = i)
+  RMSE[i] <- sqrt(sum((brain_val$Brain.weight - fit_lNN$pred)^2)/nrow(brain_val))
+}
+```
+```{r}
+plot(y = RMSE, x = k_number, xlab = "k")
+axis(1, 1:15, las = 1)
+cat("\nAccording to plot, I will choose k = 6 since when k = 6 we can get the least RMSE, which is", RMSE[6])
+```
+
+In homework 1, I chose linear model with age and without interaction as my best model. Its RMSE of test was 49.5393, which is quite less than KNN model. It means that the prediction performance is not improved. This result is due to bias-variance tradeoff. The KNN model is less variance than linear regression model since it is a simpler model, which means with different datasets, KNN model's prediction will be more stable. But on the other side, KNN model is more bias than linear regression model. Since RMSE consists of variance, bias and noise. Noise is part that we cannot evaluate, but for different model, we should make a tradeoff between variance and bias. In such case, RMSE of linear regression model may be lower than KNN regression model.
+    
+<br>
+
+2. The goal of this exercise is to fit several LDA and logistic regression classifiers for breast cancer recurrence using the Ljubljana Breast cancer data. The code to pre-process/transform the data is provided below.
+
+    a. Split the data into training (70%), and validation (30%). (Becasue of the moderate sample size we will not have a separate test set -- we will soon learn about cross-validation, which will allow us to split the data into training and test data (no validation) and still perform model selection)
+    b. Using the training data, graphically assess each of the 9 predictors using a boxplot for quantitative predictors and a mosaic plot for a categorical predictors (for the transformed predictors use the quantitative versions instead of the original categorical versions). Note: you can use plot to get these graphs. Use ``plot(recurrence, your_predictor)`` to get a boxplot for a quantitative predictor and ``plot(your_predictor, recurrence)`` for a categorical predictor to get a mosaic plot. Visually determine the 3 most most predictive variables, i.e. the variables that best separate the recurrent and non-recurrent classes. (This is an informal procedure since a visual assessement is inherently subjective).
+    c. Build LDA classifiers of increasing complexity by including: i) the most predictive variable, ii) the two most predictive variables, iii) the three most predictive variables and iv) all the 9 predictor variables.
+    d. Write an R function ``classificationError`` to compute the overall misclassification error, specificity, and sensitivity of a classifier. The function shoud take a confusion matrix as its input (which you can create using ``table`` as shown in the lecture) and return a vector with the overall misclassication error, specificity and sensitivity. (Hint: separately compute the three quantities ``error``, ``spec``, and ``sens`` inside the body of the function and then put them together in a vector using ``c(error=error, sensitivity=sens, specificity=spec)`` in the last line of the body of the function before the closing curly bracket -- its last line is by default what a function returns)
+    e. Compute the training and test errors for each of the classifiers in e. Which classifier would you choose?
+    f. Plot in the same graph the training and test misclassification error as a function of classifier complexity
+    g. Repeat f. for sensitivity and specificity 
+    h. Train a logistic regression classifier on the training data using all the available (recoded) features. Although we do not focus on inference, the parameter estimates and their corresponding p-values can give us a sense of variable importance for developing predictive models. Based on the estimated logistic regression coefficients and their p-values, which variables seem most predictive? Compare with the graphical assessement in b.
+    i. Build logistic regression classifiers of increasing complexity by including: i) the most predictive variable, ii) the two most predictive variables, iii) the three most predictive variables and iv) all the 9 predictor variables.
+    j. Use the ``predict`` function with the option ``type = response`` to compute the estimated probability of recurrence for the observations in the validation set. Classify the observations to the ``recurrence`` and ``no-recurrence`` class based a probability cutoff/threshold of $p=1/2$.  Use the function ``classificationError`` you wrote above to compute the overall misclassification error for the classifiers you built in i. Choose the best classifier based on misclassification error.
+    k. Using the function ``auc`` in package ``pROC`` compute the training and validation AUC for each of the classifiers in i. Is the best classifier based on AUC the same as the one in e. based on misclassification error? 
+    l. Plot in the same graph the training and test misclassification error as a function of classifier complexity and in a separte graph plot both the training and test AUC as a function of classifier complexity. Comment on the shape of these curves.
+
+```{r}
+setwd("D:/study/MasterinUSC/PM591/week4")
+
+breast <- read.csv("breast-cancer.data.txt", header=T)
+
+levels(breast$recurrence) <- c("no-recurrence", "recurrence") #renames levels using shorter names
+
+breast$age_quant <- as.integer(breast$age) # creates a quantitative age variable
+
+breast$tumor_size_quant <- factor(breast$tumor_size, levels(breast$tumor_size)[c(1,10,2,3,4,5,6,7,8,9,11)]) #creates a quantitative tumor size variable
+breast$tumor_size_quant <- as.integer(breast$tumor_size_quant)
+
+breast$inv_nodes_quant <- factor(breast$inv_nodes, levels(breast$inv_nodes)[c(1,5,6,7,2,3,4)]) #creates a quantitative invasive nodes variable
+breast$inv_nodes_quant <- as.integer(breast$inv_nodes_quant)
+
+breast <- breast[complete.cases(breast), ] #keeps complete cases only
+```
+```{r}
+# a
+set.seed(2018)
+
+n <- nrow(breast)
+
+trainingset <- sample(1:n, floor(0.7 * n))
+
+breast_train <- breast[trainingset,]
+
+breast_val <- breast[-trainingset,]
+```
+```{r}
+str(breast_train)
+```
+```{r}
+# b
+plot(breast_train$recurrence, breast_train$age_quant)
+plot(breast_train$recurrence,breast_train$tumor_size_quant)
+plot(breast_train$recurrence,breast_train$inv_nodes_quant)
+plot(breast_train$recurrence,breast_train$deg_malig)
+plot(breast_train$menopause, breast_train$recurrence)
+plot(breast_train$node_caps, breast_train$recurrence)
+plot(breast_train$side, breast_train$recurrence)
+plot(breast_train$quadrant, breast_train$recurrence)
+plot(breast_train$irradiat, breast_train$recurrence)
+```
+```{r}
+# c
+library(MASS)
+breast_lda1 <- lda(recurrence ~ inv_nodes_quant, data = breast_train)
+breast_lda2 <- lda(recurrence ~ deg_malig + inv_nodes_quant, data = breast_train)
+breast_lda3 <- lda(recurrence ~ deg_malig + node_caps + inv_nodes_quant, data = breast_train)
+breast_lda4 <- lda(recurrence ~ age_quant + tumor_size_quant + inv_nodes_quant + deg_malig + menopause + node_caps + side + quadrant + irradiat, data = breast_train)
+```
+
+```{r}
+# d
+classificationError <- function(breast_lda, data){
+  predict_breast_lda <- predict(breast_lda, newdata = data)
+  confMatrix <- table(true = data$recurrence, predicted = predict_breast_lda$class)
+  error <- (confMatrix[1,2] + confMatrix[2,1]) / nrow(data)
+  sens <- confMatrix[2,2] / (confMatrix[2,1] + confMatrix[2,2])
+  spec <- confMatrix[1,1] / (confMatrix[1,1] + confMatrix[1,2])
+  return(c(error=error, sensitivity=sens, specificity=spec))
+}
+```
+```{r}
+# e
+breast_train_error1 <- classificationError(breast_lda1, breast_train)
+breast_train_error2 <- classificationError(breast_lda2, breast_train)
+breast_train_error3 <- classificationError(breast_lda3, breast_train)
+breast_train_error4 <- classificationError(breast_lda4, breast_train)
+
+breast_test_error1 <- classificationError(breast_lda1, breast_val)
+breast_test_error2 <- classificationError(breast_lda2, breast_val)
+breast_test_error3 <- classificationError(breast_lda3, breast_val)
+breast_test_error4 <- classificationError(breast_lda4, breast_val)
+
+breast_test_error <- rbind(breast_test_error1, breast_test_error2 ,breast_test_error3 ,breast_test_error4)
+breast_train_error <- rbind(breast_train_error1, breast_train_error2 ,breast_train_error3 ,breast_train_error4)
+breast_train_error
+breast_test_error
+```
+
+Accoridng to the test error, I will choose the second classifier with independnet variable of deg_malig and inv_nodes_quant. Since although according to the error, we can choose second and third model, considering of overfitting, I 'll choose the second one.
+
+```{r}
+# f
+plot(breast_test_error[,1], x = 1:4, ylab = "Error", xlab = "Classifier Complexity", col = "red", ylim = c(0.1,0.4), xaxt = "n", main = "Error vs. Classifier of training set and test set", type = "b")
+par(new = T)
+plot(breast_train_error[,1], x = 1:4, ylab = "", xlab = "", col = "blue", ylim = c(0.1,0.4), xaxt = "n", type = "b")
+legend("topright", legend = c("Red: Test", "Blue: Train"), text.col = c("red", "blue"))
+axis(1, 1:4, las = 1)
+```
+```{r}
+# g
+plot(breast_test_error[,2], x = 1:4, ylab = "Sensitivity", xlab = "Classifier Complexity", col = "red", ylim = c(0,0.5), xaxt = "n", main = "Sensitivity vs. Classifier of training set and test set", type = "b")
+par(new = T)
+plot(breast_train_error[,2], x = 1:4, ylab = "", xlab = "", col = "blue", ylim = c(0,0.5), xaxt = "n", type = "b")
+legend("topright", legend = c("Red: Test", "Blue: Train"), text.col = c("red", "blue"))
+axis(1, 1:4, las = 1)
+```
+
+```{r}
+# g
+plot(breast_test_error[,3], x = 1:4, ylab = "Specificity", xlab = "Classifier Complexity", col = "red", ylim = c(0.8, 1), xaxt = "n", main = "Specificity vs. Classifier of training set and test set", type = "b")
+par(new = T)
+plot(breast_train_error[,3], x = 1:4, ylab = "", xlab = "", col = "blue", ylim = c(0.8, 1), xaxt = "n", type = "b")
+legend("topright", legend = c("Red: Test", "Blue: Train"), text.col = c("red", "blue"))
+axis(1, 1:4, las = 1)
+```
+
+```{r}
+# h
+breast_glm_total <- breast
+
+breast_glm_total$recurrence <- relevel(breast_glm_total$recurrence, ref = "no-recurrence")
+
+breast_glm_train <- breast_glm_total[trainingset,]
+
+breast_glm_val <- breast_glm_total[-trainingset,]
+
+breast_glm <- glm(recurrence ~ age_quant + tumor_size_quant + inv_nodes_quant + deg_malig + menopause + node_caps + side + quadrant + irradiat, family = "binomial", data = breast_glm_train)
+
+summary(breast_glm)
+```
+According to the p-value, we found that the most three predictive variables are deg_malig, inv_nodes_quant and irradiatyes. Although there is slightly difference between decisions of graph and logistic regression, the most two predicitve variable are the same. One more thing to notice is that in graph, I chose inv_nodes_quant as the most predicitve variable, but in logistic regression, the most predictive variable is deg_malig.
+
+```{r}
+# i
+breast_glm_1 <- glm(recurrence ~ deg_malig, family = "binomial", data = breast_glm_train)
+breast_glm_2 <- glm(recurrence ~ deg_malig + inv_nodes_quant, family = "binomial", data = breast_glm_train)
+breast_glm_3 <- glm(recurrence ~ deg_malig + inv_nodes_quant + irradiat, family = "binomial", data = breast_glm_train)
+breast_glm_4 <- glm(recurrence ~ age_quant + tumor_size_quant + inv_nodes_quant + deg_malig + menopause + node_caps + side + quadrant + irradiat , family = "binomial", data = breast_glm_train)
+```
+
+```{r}
+# j
+# redefine a function
+classificationError_simple <- function(predict_set, true_set){
+  confMatrix <- table(true = true_set$recurrence, predicted = predict_set)
+  error <- (confMatrix[1,2] + confMatrix[2,1]) / nrow(true_set)
+  sens <- confMatrix[2,2] / (confMatrix[2,1] + confMatrix[2,2])
+  spec <- confMatrix[1,1] / (confMatrix[1,1] + confMatrix[1,2])
+  return(c(error=error, sensitivity=sens, specificity=spec)) 
+}
+
+pred_glm_train1 <- factor(predict(breast_glm_1, newdata = breast_glm_train, type = "response") > 0.5)
+levels(pred_glm_train1) <- c("no-recurrence", "recurrence")
+glm_error_train1 <- classificationError_simple(pred_glm_train1, breast_glm_train)
+
+pred_glm_train2 <- factor(predict(breast_glm_2, newdata = breast_glm_train, type = "response") > 0.5)
+levels(pred_glm_train2) <- c("no-recurrence", "recurrence")
+glm_error_train2 <- classificationError_simple(pred_glm_train2, breast_glm_train)
+
+pred_glm_train3 <- factor(predict(breast_glm_3, newdata = breast_glm_train, type = "response") > 0.5)
+levels(pred_glm_train3) <- c("no-recurrence", "recurrence")
+glm_error_train3 <- classificationError_simple(pred_glm_train3, breast_glm_train)
+
+pred_glm_train4 <- factor(predict(breast_glm_4, newdata = breast_glm_train, type = "response") > 0.5)
+levels(pred_glm_train4) <- c("no-recurrence", "recurrence")
+glm_error_train4 <- classificationError_simple(pred_glm_train4, breast_glm_train)
+
+pred_glm_val1 <- factor(predict(breast_glm_1, newdata = breast_glm_val, type = "response") > 0.5)
+levels(pred_glm_val1) <- c("no-recurrence", "recurrence")
+glm_error_val1 <- classificationError_simple(pred_glm_val1, breast_glm_val)
+
+pred_glm_val2 <- factor(predict(breast_glm_2, newdata = breast_glm_val, type = "response") > 0.5)
+levels(pred_glm_val2) <- c("no-recurrence", "recurrence")
+glm_error_val2 <- classificationError_simple(pred_glm_val2, breast_glm_val)
+
+pred_glm_val3 <- factor(predict(breast_glm_3, newdata = breast_glm_val, type = "response") > 0.5)
+levels(pred_glm_val3) <- c("no-recurrence", "recurrence")
+glm_error_val3 <- classificationError_simple(pred_glm_val3, breast_glm_val)
+
+pred_glm_val4 <- factor(predict(breast_glm_4, newdata = breast_glm_val, type = "response") > 0.5)
+levels(pred_glm_val4) <- c("no-recurrence", "recurrence")
+glm_error_val4 <- classificationError_simple(pred_glm_val4, breast_glm_val)
+
+glm_error_train <- rbind(glm_error_train1, glm_error_train2, glm_error_train3, glm_error_train4)
+glm_error_val <- rbind(glm_error_val1, glm_error_val2, glm_error_val3, glm_error_val4)
+
+glm_error_train
+glm_error_val
+```
+
+According to the error calculated by validation set, the third classifier is the best classifier of overall misclassification error 0.226 with three variablea of deg_malig, inv_nodes_quant and irradiatyes.
+
+```{r}
+# k 
+# install.packages("pROC")
+library("pROC")
+
+pred_auc_train1 <- predict(breast_glm_1, newdata = breast_glm_train, type = "response")
+auc1_train <- auc(response = as.numeric(breast_glm_train$recurrence == "recurrence"), predictor = pred_auc_train1)
+pred_auc_train2 <- predict(breast_glm_2, newdata = breast_glm_train, type = "response")
+auc2_train <- auc(response = as.numeric(breast_glm_train$recurrence == "recurrence"), predictor = pred_auc_train2) 
+pred_auc_train3 <- predict(breast_glm_1, newdata = breast_glm_train, type = "response")
+auc3_train <- auc(response = as.numeric(breast_glm_train$recurrence == "recurrence"), predictor = pred_auc_train3) 
+pred_auc_train4 <- predict(breast_glm_1, newdata = breast_glm_train, type = "response")
+auc4_train <- auc(response = as.numeric(breast_glm_train$recurrence == "recurrence"), predictor = pred_auc_train4) 
+
+pred_auc_val1 <- predict(breast_glm_1, newdata = breast_glm_val, type = "response")
+auc1_val <- auc(response = as.numeric(breast_glm_val$recurrence == "recurrence"), predictor = pred_auc_val1)
+pred_auc_val2 <- predict(breast_glm_2, newdata = breast_glm_val, type = "response")
+auc2_val <- auc(response = as.numeric(breast_glm_val$recurrence == "recurrence"), predictor = pred_auc_val2)
+pred_auc_val3 <- predict(breast_glm_3, newdata = breast_glm_val, type = "response")
+auc3_val <- auc(response = as.numeric(breast_glm_val$recurrence == "recurrence"), predictor = pred_auc_val3)
+pred_auc_val4 <- predict(breast_glm_4, newdata = breast_glm_val, type = "response")
+auc4_val <- auc(response = as.numeric(breast_glm_val$recurrence == "recurrence"), predictor = pred_auc_val4)
+
+
+
+auc_train <- c(auc1_train, auc2_train, auc3_train, auc4_train)
+auc_val <- c(auc1_val, auc2_val, auc3_val, auc4_val)
+auc_train
+auc_val
+```
+
+The best classifier based on AUC is different from the one in e. based on misclassification error. By judge AUC of validation set, the best model is the second model with two variables of deg_malig and inv_nodes_quant.
+
+```{r}
+# l
+plot(glm_error_val[,1], x = 1:4, ylab = "Misclassifcaiton Error", xlab = "Classifier Complexity", col = "red", ylim = c(0, 0.5), xaxt = "n", main = "Misclassifcaiton Error vs. Classifier of training set and test set", type = "b")
+par(new = T)
+plot(glm_error_train[,1], x = 1:4, ylab = "", xlab = "", col = "blue", ylim = c(0, 0.5), xaxt = "n", type = "b")
+legend("topright", legend = c("Red: Test", "Blue: Train"), text.col = c("red", "blue"))
+axis(1, 1:4, las = 1)
+
+plot(auc_val, x = 1:4, ylab = "AUC", xlab = "Classifier Complexity", col = "red", ylim = c(0.5, 1), xaxt = "n", main = "AUC vs. Classifier of training set and test set", type = "b")
+par(new = T)
+plot(auc_train, x = 1:4, ylab = "", xlab = "", col = "blue", ylim = c(0.5, 1), xaxt = "n", type = "b")
+legend("topright", legend = c("Red: Test", "Blue: Train"), text.col = c("red", "blue"))
+axis(1, 1:4, las = 1)
+```
+
+From the figure of "Misclassifcaiton Error vs. Classifier of training set and test set", we find that in training group, the error is decreasing with the increasing of variables, but in validation group, the third classifier has the best predicting performance. This is because complex model may fit orignal data well, but it has larger variance and overfitting problem. From the figure of "AUC vs. Classifier of training set and test set", we find that in the training group, the AUC is increasing with the increasing of variables, but in validation group, the second model has the best prediction performance. It is different from the judgement of error. This is because tradeoff between specificity and sensitivity. In the logistic regression, we have already set the threshold and calculated the misclassification error. But when judged by AUC, we just evaluated the tradeoff between specificity and sensitivity. In the other words, we concentrate on the overlap of two distribution. In such case, we will have different conclusion.
+
+
+### Conceptual
+
+1. The goal of this exercise is to gain a deeper understanding of the trade-off between sensitivity and sepecificity and the ROC curve. Assume a binary classification problem with a single quantitative predictor $X$. Assume that you know the true distribution of $X$ for each of the two classes (in practice these distributions would not be known but can be estimated as its done in LDA). Specifically, $\,X \sim N(\mu=-1, \sigma=1)$ in the negative class $\,Y=0$ and $\,X \sim N(\mu=2, \sigma=1)$ in the positive class $\,Y=1$. 
+Assume also that the two classes are equally likely. 
+
+    a. Derive the posterior probabilities $\, P(Y=0 \;|\; X=x)$ and $\, P(Y=1 \;|\; X=x)$. 
+    b. Derive the Bayes rule that classifies an observation with $\,X=x$ to $\,Y=1$ if $\, P(Y=1 \;|\; X=x) > P(Y=0 \;|\; X=x)$
+    c. Show that there is a cuttof $\,t_{Bayes}$ such that the Bayes rule can be expressed as:
+\[
+Y = \begin{cases}
+  0 & \text{if} \quad x \le t_{Bayes} \\
+  1 & \text{if} \quad x > t_{Bayes}
+\end{cases}
+\]
+
+    d. Compute the specificity, sensitivity, false positive rate, false negative rates, and overall misclassification rate for the Bayes rule. (Hint: recall you can use the R function ``pnornm`` to compute the probability that a normal variable exceeds or is below a given threshold) 
+    e. Consider now the more general decision rule (below) with arbitrary cutoff $t$ (not necessarily $\,t_{Bayes}$).  Compute the specificity, sensitivity, false positive rate, false negative rates, and overall misclassification rate for a grid of 20 equally spaced values of the cutoff $t$ ranging from $t=-4$ to $t=6$. (Hint: use ``seq`` to generate the grid and a ``for`` loop to iterate over the grid values.)
+
+\[
+Y = \begin{cases}
+  0 & \text{if} \quad x \le t \\
+  1 & \text{if} \quad x > t
+\end{cases}
+\]
+
+    f. Plot in the same graph the sensitivity, specificity and misclassification rate as a function of $t$.  Interpret the plot and comment on the cutoff where the minimum misclassification rate is attained.
+    g. Plot the ROC curve.
+    
+
+a.
+
+$$\begin{split}
+p(Y = 0 | X = x) &= \frac{p(X =x|Y = 0)*p(Y = 0)}{p(X = x)} \\
+&= \frac{p(X =x|Y = 0)*p(Y = 0)}{p(X =x|Y = 1)*p(Y = 1)\ +\ p(X =x|Y = 0) * p(Y = 0)} \\
+&= \frac{p(X =x|Y = 0)}{p(X =x|Y = 1)\ +\ p(X =x|Y = 0)} \\
+\end{split}
+$$
+$$\begin{split}
+p(Y = 1 | X = x) &= \frac{p(X =x|Y = 1)*p(Y = 1)}{p(X = x)} \\
+&= \frac{p(X =x|Y = 1)*p(Y = 1)}{p(X =x|Y = 1)*p(Y = 1)\ +\ p(X =x|Y = 0) * p(Y = 0)} \\
+&= \frac{p(X =x|Y = 1)}{p(X =x|Y = 1)\ +\ p(X =x|Y = 0)}
+\end{split}
+$$
+
+b.
+
+$$\begin{split}
+&p(Y=1|X=x)\ >\ p(Y=0|X=x) \\
+&p(Y=1|X=x)\ >\ 1 - p(Y=1|X=x) \\
+&2*p(Y=1|X=x)\ >\ 1 \\
+&p(Y=1|X=x)\ >\ 0.5 
+\end{split}$$
+
+Since two classes are equal likely, this x will be classified into Y = 1
+
+Proved.
+
+c.
+
+The threshold will be like this:
+
+$$\begin{split}
+&p(Y=1|X=x)\ =\ p(Y=0|X=x) \\
+&p(X=0|Y=1)\ =\ p(X=x|Y=1) \\
+&\frac{1}{\sigma_1\sqrt{2\pi}}e^{-\frac{(x-\mu_1)^2}{2\sigma_1^2}}\ =\ \frac{1}{\sigma_2\sqrt{2\pi}}e^{-\frac{(x-\mu_2)^2}{2\sigma_2^2}}
+\end{split}$$
+
+Since $\sigma_1 = \sigma_2 = 1$
+
+$$\begin{split}
+&e^{-\frac{(x-\mu_1)^2}{2\sigma_1^2}}\ =\ e^{-\frac{(x-\mu_2)^2}{2\sigma_2^2}} \\
+&(x-\mu_1)^2\ =\ (x-\mu_2)^2 \\
+&(x+1)^2\ =\ (x-2)^2 \\
+&x = \frac12
+\end{split}$$
+
+In such case, $t_{bayes}\ =\ \frac12$.
+
+d.
+```{r}
+true_negative_rate <- pnorm(1/2, -1, 1)
+false_negative_rate <- pnorm(1/2, 2, 1)
+true_positive_rate <- 1 - false_negative_rate
+false_positive_rate <- 1 - true_negative_rate
+sensitivity <- true_positive_rate / 1
+specificity <- true_negative_rate / 1
+overall_misclassificaiton_rate <- (false_negative_rate + false_positive_rate) / 2
+cat("\nSpecificity is", specificity, ", sensitivity is", sensitivity, ", false positive rate is", false_positive_rate, ", false negative rates is", false_negative_rate, "and overall misclassification rate is", overall_misclassificaiton_rate, "for the Bayes rule.")
+```
+
+e.
+```{r}
+t <- seq(-4, 6, length.out = 21)
+result <- mat.or.vec(0,3)
+for(i in t){
+  true_negative_rate <- pnorm(i, -1, 1)
+  false_negative_rate <- pnorm(i, 2, 1)
+  true_positive_rate <- 1 - false_negative_rate
+  false_positive_rate <- 1 - true_negative_rate
+  sensitivity <- true_positive_rate / (true_positive_rate + false_negative_rate)
+  specificity <- true_negative_rate / (true_negative_rate + false_positive_rate)
+  overall_misclassificaiton_rate <- (false_negative_rate + false_positive_rate) / 2
+  result <- rbind(result, c(sensitivity, specificity, overall_misclassificaiton_rate))
+  cat("\nSpecificity is", specificity, ", sensitivity is", sensitivity, ", false positive rate is", false_positive_rate, ", false negative rates is", false_negative_rate, "and overall misclassification rate is", overall_misclassificaiton_rate, "for t=",i, ".")
+}
+```
+
+f.
+
+```{r}
+plot(x = t, y = result[,1], type = "b", col = "red", xlab = "", ylab = "", ylim = c(0,1.5), xaxt = "n", yaxt = "n")
+par(new = T)
+plot(x = t, y = result[,2], type = "b", col = "blue", xlab = "", ylab = "", ylim = c(0,1.5), xaxt = "n", yaxt = "n")
+par(new = T)
+plot(x = t, y = result[,3], type = "b", col = "black", ylab = "Sens, Spec and Misclassification", ylim = c(0,1.5))
+legend("topright", legend = c("Red: Sensitivity", "Blue: Specificity", "Black: Misclassification"), text.col = c("red", "blue", "black"))
+abline(v = 1/2, col = "grey", lwd = 2)
+```
+
+At the beginning with t = -4, all subjects will be classified as positive and of course with 100% sensitivity, 0% specificity and 50% misclassification rate. With the increasing of threshold, the sensitivity start to decrease, while specificity start to increase with decreasing misclassification rate. When t = 1/2, the misclassification rate arrived the lowest point, which is just the same as bayes method. And then the misclassication rate start to increase. when t = 6, we get 100% specificity and 0% sensitivity with 50% misclassification rate.
+
+From the result, we can conclude that bayes classification method may give us the least misclassification rate.
+
+g.
+
+```{r}
+plot(x = result[,2], y = result[,1], type = "l", xlim = c(1,0), xlab = "specificity", ylab = "sensitivity", main = "ROC curve", col = "red", lwd = 2)
+abline(1, -1, col = "grey", lwd = 2)
+```

@@ -1,0 +1,370 @@
+---
+html_document: default
+author: "Assignment 5"
+date: "Due 4/11/2019"
+title: "PM 591 -- Machine Learning for the Health Sciences."
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#### Exercise 1 (Analysis)
+
+You will build a model to predict psa levels using PCA linear regression using the PSA prostate data
+
+i. Load the mlR library and the prostate data
+```{r}
+library(mlr)
+library(ElemStatLearn)
+data(prostate)
+prostate = prostate[, -10] #removes the last column which arbitrarily designated observationd for training and testing 
+```
+
+ii. Specify the regression task and the base linear regression learner. Note: we will not split the data into training and testing because of the modest sample size. Explain whether this invalidates any prediction model we develop and why in practice we always want a test set.
+
+```{r}
+psa_tsk = makeRegrTask(id = "PSA prediction", data = prostate, target = "lpsa")
+
+lm_lrn = makeLearner("regr.lm", fix.factors.prediction = TRUE)
+```
+
+Yes, this behavior absolutely invalidates the prediction model. Although cross-validation can be used to choose model, actually, it still predict the model on the train dataset. Cross-validation can reducce variance of the error, but it cannot change the expectation of the error. In practice, we always want to use a dataset different from train dataset to see the performance of our model. In such case, we always want a test set.
+
+iii. Create a new learner adding a PCA preprocessing step to the base learner. In ``mlR`` parlance this is called a wrapped learner. This becomes a new 'composite' learner that can be used just like any of the standard learners we used before. In particular if K-fold CV is used, both the PCA and the linear regression will be used for training on each set of K-1 folds and prediction on the K-th fold. The following is taken from the mlR documentation:
+
+> Wrappers can be employed to extend integrated learners with new functionality. The broad scope of operations and methods which are implemented as wrappers underline the flexibility of the wrapping approach: Data preprocessing, Imputation, Tuning, Feature selection, ....
+
+
+
+
+```{r}
+# combines linear regression and PCA into a single learner
+PCA_lm_lrn = makePreprocWrapperCaret(lm_lrn, ppc.pca = TRUE) 
+```
+
+iv. Rather than fixing it as in the lecture, we will treat the number of principal components  ``ppc.pcaComp`` as a tuning parameter. Specify ``ppc.pcaComp`` as a an integer tuning parameter ranging from 1 to the number of features in the PSA data
+
+
+```{r}
+ps = makeParamSet(makeIntegerParam("ppc.pcaComp", lower = 1, upper = getTaskNFeats(psa_tsk)))
+```
+
+v. Create a control object for hyperparameter tuning with grid search.
+
+```{r}
+ctrl = makeTuneControlGrid(resolution = 10) 
+# resolution is the number of points in the grid of values for the tuning parameter. Since there are 8 possible PCs we want resolution >= 8
+```
+
+vi. Perform the tuning
+
+```{r}
+tuneParams(PCA_lm_lrn, task=psa_tsk, cv5, par.set = ps, control = ctrl, show.info = TRUE)
+```
+
+vii. How many principal components are selected? Does preprocessing by PCA help in this case?
+
+8 principle components are selected. The preprocessing by PCA is quite helpful in this case since if we only consider the PCA process, the process may stop at 3, but actually 8 is the best number of principle components.
+
+#### Exercise 2 (Analysis)
+You will build a classifier to predict cancer specific death among breast cancer patients within 1-year of diagnosis based on a subset of 1,000 gene expression features from the Metabric data using ridge and lasso logistic regression. (The metabric data contains close to 30,000 gene expression features, here we use a subset to keep computation times reasonable for this in class Lab. In the homework version you will use the full feature set)
+
+i. Load the mlr library and the Metabric data
+
+```{r}
+library(mlr)
+
+setwd("D:/study/MasterinUSC/PM591/week9") # sets the directory. Use your path to the metabric data file
+
+load('metabric.Rdata') 
+```
+
+ii. Check the dimension of the metabric dataframe using ``dim`` check the number of deaths using ``table`` on the binary outcome variable
+
+```{r}
+dim(metabric)
+table(metabric$y)
+```
+
+iii. Split the data into training (70%) and test (30%)
+
+iv. Create an appropriate mlR task
+
+```{r}
+set.seed(20190330)
+metabric_tsk <- makeClassifTask(id = "Metabric", data = metabric, target = "y")
+
+split_decs <- makeResampleDesc(method = "Holdout", stratify = T, split = 0.7)
+
+split <- makeResampleInstance(split_decs, task = metabric_tsk)
+
+train <- split$train.inds[[1]]
+test <- split$test.inds[[1]]
+```
+
+v. Create lasso and ridge learners using "classif.cvglmnet" (Recall that by specifying ``cv.glmnet`` as the learner, k-fold (10-fold by default) will be automatically used to tune the lambda penalty parameter. This takes advantage of the fast implementation of cross-validation within the ``glmnet`` package rather than cross-validating using the ``mlr`` tools ``makeResampleDesc`` and ``resample``)
+
+```{r}
+metabric_lrn_lasso <- makeLearner("classif.cvglmnet", fix.factors.prediction = T, alpha = 1, type.measure = 'auc')
+
+metabric_lrn_ridge <- makeLearner("classif.cvglmnet", fix.factors.prediction = T, alpha = 0, type.measure = 'auc')
+```
+
+vi. Train the LASSO and the ridge model on the training data using CV with an appropriate performance measure (hint: you can check the available measures for your task using ``listMeasures``). Extract the cross-validated measure of performance. Why is the CV measure of performnace the relevant metric to compare models? 
+
+```{r}
+psa_cvlasso_mlr <- train(learner = metabric_lrn_lasso, task = subsetTask(metabric_tsk, subset = train))
+
+plot(getLearnerModel(psa_cvlasso_mlr), cex.lab = 2, cex.axis = 2)
+
+psa_cvridge_mlr <- train(learner = metabric_lrn_ridge, task = subsetTask(metabric_tsk, subset = train))
+
+plot(getLearnerModel(psa_cvridge_mlr), cex.lab = 2, cex.axis = 2)
+
+auc_lasso_metabric <- max(psa_cvlasso_mlr$learner.model$cvm)
+
+auc_ridge_metabric <- max(psa_cvridge_mlr$learner.model$cvm)
+```
+
+Since cross-validation decrease the variance of the auc, in such case, the CV measure of performnace the relevant metric to compare models more precisely.
+
+vii. Which method performs best? What does this say about the likely nature of the true relationship between the expression features and the outcome?
+
+```{r}
+plot(c(auc_lasso_metabric, auc_ridge_metabric), xaxt = "n", xlab = "Model", ylab = "AUC", main = "LASSO and RIDGE")
+axis(1, c(1,2), labels = c("lasso", "ridge"))
+```
+
+The ridge method performance better than lasso method. The result shows that outcome is related to every feature in the dataset.
+
+viii. Report an 'honest' estimate of prediction performance.
+
+```{r}
+metabric_ridge_lambda.min <- psa_cvridge_mlr$learner.model$lambda.min
+
+metabric_ridge_lambda.min_lnr <- makeLearner("classif.glmnet", lambda = metabric_ridge_lambda.min, fix.factors.prediction = T, predict.type = "prob", alpha = 0)
+
+metabric_ridge_lambda.min_model <- train(metabric_ridge_lambda.min_lnr, task = metabric_tsk, subset = train)
+
+metabric_ridge_predict <- predict(metabric_ridge_lambda.min_model, task = metabric_tsk, subset = test)
+
+performance(metabric_ridge_predict, measures = auc)
+```
+
+The honest estimate of prediction performance is auc = 0.7221074
+
+ix. Re-train the best performing method on all the data (training and test). This is the final model you would use to predict death in new women just diagnosed and treated for breast cancer. Why is this ok and why is this better than simply using the model trained on just the training data? 
+```{r}
+metabric_ridge_lambda.min_final <- train(metabric_ridge_lambda.min_lnr, task = metabric_tsk)
+```
+
+Since the bigger the dataset, the less random error of the model. In such case, we should use the whole dataset to fit the model.
+
+x. The dataset ``new_expression_profiles`` contains the gene expression levels for 15 women just diagnosed with breast cancer. Estimate their one-year survival probabilities.
+
+```{r}
+new_expression <- read.csv("D:/study/MasterinUSC/PM591/week9/new_expression_profiles.csv")
+
+new_expression_predict <- predict(metabric_ridge_lambda.min_final, newdata = new_expression[,-1])
+
+new_expression_predict$data
+```
+
+<br>
+
+### Exercise 3 (Analysis/conceptual)
+You will assess how well a tree model can capture non-linearities by fitting a regression tree to simulated non-linear data.
+
+i. Simulate the data
+
+```{r}
+set.seed(1984) 
+n = 1000
+x = runif(n, -5, 5) # n observations uniformly distributed in the interval -5 to 5
+error = rnorm(n, sd=0.5)
+y = sin(x) + error # nonlinear relationship between outcome y and feature x
+nonlin = data.frame(y=y, x=x)
+```
+
+ii. Split the data into training and testing (500 observations in each). Plot the data -- scatterplot of y vs. x
+
+```{r}
+set.seed(2019)
+train <- sample(1000, 500)
+```
+
+iii. Fit a regression tree using the trainig set 
+
+```{r}
+library(rpart)
+treefit = rpart(y~x, method='anova', control=list(cp=0), data=nonlin[train,]) # Method='anova' indicate sregression tree. cp=0 ensures that binary recursive partitioning will not stop early due to lack of improvement in RSS by an amount  of at least cp
+```
+
+iv. Plot the fitted regression tree
+
+```{r}
+plot(treefit) # plots the tree
+text(treefit) # annotates the tree. May fail if tree is too large
+
+library(rpart.plot)
+rpart.plot(treefit) #the rpart.plot function generates better looking trees!
+```
+
+Note: the height of the branches are proportional to the improvement in RSS
+
+v. Plot the cv relative error to determine the optimal complexity parameter
+
+```{r}
+plotcp(treefit)
+```
+
+vi. Print the table complexity parameter values and their associated cv-errors
+
+```{r}
+printcp(treefit)
+```
+
+vii. Select the optimal complexity parameter and prune the tree
+
+```{r}
+optimalcp = 0.00362176 # for you to fill in
+treepruned = prune(treefit, cp=optimalcp)
+```
+
+viii. Plot the pruned tree
+
+```{r}
+rpart.plot(treepruned)
+```
+
+ix. Summarize the pruned tree object and relate the summary to the plotted tree above
+
+```{r}
+summary(treepruned)
+```
+
+x. Based on the plot and/or summary of the pruned tree create a vector of the (ordered) split points for variable x, and a vector of fitted values for the intervals determined by the split points of x.
+
+```{r}
+x_splits_initial = treepruned$splits[,4] # for you to fill in
+
+x_splits <- sort(x_splits_initial)
+
+index <- numeric()
+
+for (i in 1:length(x_splits_initial)){
+  index[i] <- which(x_splits_initial == x_splits[i])
+}
+
+test.data <- as.data.frame(x_splits)
+
+row.names(test.data) <- c(1:10)
+
+colnames(test.data) <- c("x")
+
+y_splits = rpart.predict(treepruned, newdata = test.data) # for you to fill in
+
+y_splits <- c(0.85199917, y_splits)
+```
+
+xi. Plot the step function corresponding to the fitted (pruned) tree
+
+```{r}
+plot(y~x, data=nonlin[train,])
+stpfn = stepfun(x_splits, y_splits) #stepfun creates the step function 
+plot(stpfn, add=TRUE, lwd=2, col='red4') #add=TRUE plots over the existing plot 
+```
+
+xii. Fit a linear model to the training data and plot the regression line. Contrats thethe quality of the fit of the tree model vs. linear regression by inspection of the plot
+
+```{r}
+lmfit = lm(y ~ x, data=nonlin[train,])
+summary(lmfit)
+
+plot(y~x, data=nonlin[train,])
+plot(stpfn, add=TRUE, lwd=2, col='red4')
+abline(lmfit, col='blue', lwd=2)
+```
+ 
+xiii. Compute the test MSE of the pruned tree and the linear regression model
+
+```{r}
+library(mlr)
+test <- setdiff(1:1000, train)
+
+predict_tree <- rpart.predict(treepruned, newdata = nonlin[test,])
+
+predict_lm <- predict(lmfit, newdata = nonlin[test,])
+
+plot(nonlin[test,]$x, predict_tree)
+
+measureMSE(nonlin[test,]$y, predict_tree)
+measureMSE(nonlin[test,]$y, predict_lm)
+```
+
+### Exercise 4 (Analysis)
+You will recreate the analysis of the heart data in the textbook and lecture. 
+
+i.   Split the data into training and testing
+```{r}
+heart <- read.csv("D:/study/MasterinUSC/PM591/week10/homework/Heart.csv")
+
+summary(heart)
+
+set.seed(20190408)
+heart_tsk <- makeClassifTask(id = "heart", data = heart, target = "AHD")
+
+holdout_desc <- makeResampleDesc(method='Holdout', stratify = TRUE)
+
+hold <- makeResampleInstance(holdout_desc, task = heart_tsk, split=0.7)
+
+train <- hold$train.inds[[1]]
+
+test <- hold$test.inds[[1]]
+```
+
+ii.  Fit a classification tree using ``rpart``
+
+```{r}
+library(rpart)
+library(rpart.plot)
+heart_tree <- rpart(AHD ~., method='class', data=heart[train,], control=list(minsplit = 10, minbucket=2, cp =0.0, xval=10))
+```
+
+iii. Plot the unpruned tree
+```{r}
+rpart.plot(heart_tree, cex = 0.7)
+```
+
+iv.  Plot the cv error
+```{r}
+plotcp(heart_tree)
+printcp(heart_tree)
+```
+
+v. Prune the tree using the optimal complexity parameter
+```{r}
+heart_pruned_tree <- prune(heart_tree, cp = 0.016)
+```
+
+vi. Plot the pruned tree
+```{r}
+rpart.plot(heart_pruned_tree, cex = 0.7)
+```
+
+vii. Compute the test misclassification error
+```{r}
+heart_predict <- predict(heart_pruned_tree, newdata = heart[test,], type = "class")
+
+measureMMCE(truth = heart[test,length(heart)], response = heart_predict)
+```
+
+The test misclassification error is 0.2255.
+
+vii. Fit the tree with the optimal complexity parameter to the full data (training + testing)
+```{r}
+final_tree <- rpart(AHD ~., method='class', data=heart, control = list(cp = 0.016))
+
+rpart.plot(final_tree)
+```

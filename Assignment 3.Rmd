@@ -1,0 +1,485 @@
+---
+title: "PM 591 -- Machine Learning for the Health Sciences"
+author: "Assignment 3"
+date: "Due 2/28/2019"
+output:
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+palette(rainbow(6))
+```
+<br>
+
+### Analysis 
+Exercise 1
+
+NOTE: this exercise has a couple of added items (marked **NEW**) compared to the Lab 6 version. You will build a KNN classifier to predict breast cancer recurrence using the Ljubljana Breast cancer data and tune the complexity parameter $\,K$ using k-fold cross validation. (Note: the $\, K$ in KNN and the $\, k$ in k-fold cross validation are not the same K! The $\, K$ in KNN refers to the number of nearest neighbors and the $\, k$ in k-fold cross validation refers to the number of folds used to cross-validate). Tuning the $\, K$ parameter in KNN means choosing the value of $\, K$ that minimizes the validation error. The code to pre-process/transform the data is provided below (identical to that used for LDA and logistic regression in Labs 4 and 5). You will use the ``mlr`` package that makes many common machine learning tasks much more efficient. 
+
+a. Summarize the Breast cancer data using the ``mlR`` function ``summarizeColumns``. Notice that the summary includes information about missing values and number of levels for categorical variables.
+
+b. Split the data into training (70%), and validation (30%) as usual:
+
+$\hspace{2em}$ ``set.seed(303)``
+
+$\hspace{2em}$ ``n = nrow(breast)``
+
+$\hspace{2em}$ ``train = sample(n, size = floor(0.7*n))``
+
+$\hspace{2em}$ ``validation = setdiff(1:n, train)  # equivalent to (1:n)[-train]``
+
+<br>
+
+c. Specify the learning task (classification) using the ``makeClassifTask`` function. We will only use "deg_malig","inv_nodes_quant" as predictors:
+
+      ``       breast.tsk = makeClassifTask(id = "Breast Cancer Recurrence",
+      ``                                       data = breast[, c("recurrence", "deg_malig","inv_nodes_quant")],`` 
+      ``                                       target = "recurrence")``
+                    
+
+$\hspace{2em}$ The 'id' argument is just a name used later for labeling results. 
+The `data` argument specifies the data.frame where the data is stored. 
+$\hspace{2em}$ The `target` argument specifies the outcome variable. All feature variables in the data set will be used as predictors. 
+
+$\hspace{2em}$ ``breast[, c("recurrence", "deg_malig","inv_nodes_quant")]``
+
+<br>
+
+d. Specify the learner/model/algorithm (KNN with K=1)
+
+$\hspace{2em}$ ``breast.lrn = makeLearner("classif.knn", k=1, fix.factors.prediction = TRUE)``
+
+$\hspace{2em}$ The fix.factors.prediction = T argument ensures proper dealing with the levels of a factor when splitting the data for cross-validation
+
+<br>
+
+e. Train the classifier using the ``train`` function on the training data:
+
+$\hspace{2em}$ ``breast_1NN = train(breast.lrn, breast.tsk, subset = train)``
+
+<br>
+
+f. Predict using validation set, compute the confusion matrix and measures of performance:
+
+$\hspace{2em}$ ``breast_predict = predict(breast_1NN, task = breast.tsk, subset = validation)``
+
+$\hspace{2em}$ ``calculateConfusionMatrix(breast_predict)``
+
+$\hspace{2em}$ ``performance(breast_predict, measures = list(mmce, acc)) #misclassification error and accuracy``
+
+<br>
+
+g. Repeat steps d-f for KNN  with $\,K=1,2,3,...,30$ 
+
+$\hspace{2em}$ Hint 1: use a for loop 
+
+$\hspace{2em}$ Hint 2: reset the learner for using KNN with $\, K = i$ using:
+
+$\hspace{2em}$ ``breast.lrn = makeLearner("classif.knn", k=i, fix.factors.prediction = TRUE)``
+
+<br>
+
+h. Plot the misclassification error as a function of $\,K$. Which model do you choose? Why?
+
+i. **NEW** Repeat the whole process (steps b. to c.) 5 times with different random training/validation splits. Plot the 5 curves analog to the one obtained in h. in the same graph. Do you choose the same value of $\,K$ for each of the 5 splits? What does this say about the stability/variability of using a single training/validation split to perform model selection? 
+
+$\hspace{2em}$ Hint 1: use nested loops: 
+
+$\hspace{3em}$ The inner loop to iterate over $\,K=1,2,3,...,30$ as you did above. 
+
+$\hspace{3em}$ The outer loop to iterate over the 5 replications of the entire procedure.
+
+$\hspace{2em}$ Hint 2:  Set the seed just one time outside the outer loop. Each split will then be automatically different from the others
+
+<br>
+
+j. You will now perform 10-fold cross-validation to evaluate the KNN classifier with $\, K = 1$ instead of a single training/validation split.
+
+$\hspace{2em}$ Reset to use $\,K = 1$ ``breast.lrn = makeLearner("classif.knn", k=1, fix.factors.prediction = TRUE)``
+
+$\hspace{2em}$ Perform cross-validation using the ``crossval`` function:
+
+$\hspace{2em}$ ``cv_val = crossval(breast.lrn, breast.tsk, iters = 10L, stratify = TRUE, measures=mmce)``
+
+$\hspace{2em}$ ``cv_val``
+ 
+$\hspace{2em}$You can extract the actual misclassification error from the object returned by crossval using ``cv_val$aggr``
+
+      NOTE: ``stratify = TRUE`` ensures that each fold has (approximately) the same proportion of observations in the positive (recurrence) and negative (non-recurrence) class as the full data set.
+
+<br>
+
+k. You will now perform tuning of the $\,K$ parameter by examiming the cross-validation error rather than the single-split validation error.  Repeat steps h. for KNN  with  $\,K=1,2,3,...,30$
+
+$\hspace{2em}$ Hint 1: use a for loop. 
+
+$\hspace{2em}$ Hint 2: reset the learner for using KNN with $\, K = i$ as above.
+
+<br>
+
+l. Plot the crosvalidation misclassification error as a function of $\,K$. Which model do you choose? Do you chose the same model you selected in h.? If diferent, which one would you prefer? Why? 
+
+m. **NEW** Repeat the whole 10-fold cross-validation process (steps j. to l.) 5 times with different random cross-validation folds. Plot the 5 curves analogs to the one obtained in l. in the same graph. Do you choose the same value of $\,K$ for each of the 5 splits? Compare the variability of the coross-validation curves to that of the single training/validation splits in i.
+
+
+### Analysis/conceptual 
+
+Exercise 2
+
+The ``mlR`` package allows the user to easily tune a parameter without a loop like in Exercise 1. You will now tune the  $\, K$ parameter directly using the tools provided in ``mlr`` using validation and several forms of cross-validation including:  leave-one-out cross-validation, k-fold cross validation,  repeated k-fold cross validation. You will compare the tuning of the complexity parameter $\,K$ using a validation set and all these different forms of cross-validation. 
+
+Step 1:  To tune the complexity parameter $\,K$ in KNN the first setp is to specify the range of values of using $\,K$ we want to consider using the ``mlr`` function ``makeParamSet``:
+
+```{r, eval=FALSE}
+Kvals = makeParamSet(makeDiscreteParam("k", values = 1:30)) # set to explore values K=1,...,30
+```
+
+Step 2:  Specify the type of resampling task (or simple validation):
+
+For single training/validation split:
+
+```{r, eval=FALSE}
+breast_holdout = makeResampleDesc("Holdout", stratify=TRUE) # default split: 2/3 training, 1/3 validation
+```
+
+For leave-one-out cross-validation:
+
+```{r, eval=FALSE}
+breast_LOO = makeResampleDesc("LOO")
+```
+
+Again, setting ``stratify=TRUE`` ensures the same proportion of observations in the positive and negative classes as in the full dataset for each of the CV folds:
+
+For K-fold cross-validation:
+
+```{r, eval=FALSE}
+breast_10CV = makeResampleDesc("CV", iters = 10L, stratify=TRUE)
+```
+
+For repeated K-fold cross-validation:
+
+```{r, eval=FALSE}
+breast_RepCV = makeResampleDesc("RepCV", reps=5L, folds = 10L, stratify=TRUE)
+```
+
+Step 3: Use the function ``makeTuneControlGrid`` to set internal control parameters to perform the tuning:
+
+```{r, eval=FALSE}
+ctrl = makeTuneControlGrid() # here we use the defaults so we don't specify any parameters
+```
+
+Step 4: perform the actual tuning. For example, using the tuning from the single split validation method:
+
+```{r, eval=FALSE}
+breast_holdout_tune = tuneParams("classif.knn", task = breast.tsk, resampling = breast_holdout,
+                 par.set = Kvals, control = ctrl, measures=mmce)
+```
+
+You can extract the error for all values of $\,K$ using:
+
+```{r, eval=FALSE}
+generateHyperParsEffectData(breast_holdout_tune)$data
+```
+
+a. Specify the learning task (classification) using the ``makeClassifTask`` function. We will only use "deg_malig","inv_nodes_quant" as predictors:
+
+```{r, eval=FALSE}
+breast.tsk = makeClassifTask(id = "Breast Cancer Recurrence", data = breast[, c("recurrence", "deg_malig","inv_nodes_quant")], target = "recurrence")
+```
+
+Tune the $\,K$ parameter using i) a single validation set, ii) LOO CV, iii) K-fold CV, iV) repeated K-fold CV. Does tuning select the same value of $\,K$ using each of the methods? Why? Comment on the tuning times for each method and explain the differences.
+
+b. Plot the misclassification error for each of the CV methods above (including the single validation split method) as a function of $\,K$ on the same graph. 
+
+c. After parameter tuning one should retrain the model using the full training data. Select a value of $\,K$ based on the tuning in a. and retrain the model using all the data (in our case we did not set aside a test set, so the full data is our training set). For example, using the tuning from the single split validation method you can specify the learner as:
+
+```{r, eval=FALSE}
+breast_lrn_tuned = setHyperPars(makeLearner("classif.knn"), par.vals = breast_holdout_tune$x)
+```
+
+d. Repeat step a. 5 times (the tuning, no need to re-specify the learning task) using a for loop. On a separate graph for each CV method plot the 5 replicate curves. Explain the different variabilities observed among the different CV methods.
+
+Hint: since there are four validation/CV methods explored you can split the plotting area in 4 (two rows and two columns) with ``par(mfrow=c(2,2))`` before doing any plotting. Each plot you generate with ``plot`` will now be displayed in each of the 4 plotting areas respectively. This makes visual comparisons among the 4 plots much easier.
+
+## Exercise 1
+
+```{r}
+# a
+library("mlr")
+breast <- read.csv("D:/study/MasterinUSC/PM591/dataset/breast-cancer.data.txt", header = T)
+summarizeColumns(breast)
+
+breast <- breast[complete.cases(breast), ]
+
+levels(breast$recurrence) <- c("no-recurrence", "recurrence")
+
+breast$age_quant <- as.integer(breast$age)
+
+breast$tumor_size_quant <- factor(breast$tumor_size, levels(breast$tumor_size)[c(1, 10, 2, 3, 4, 5, 6, 7, 8, 9, 11)])
+
+breast$tumor_size_quant <- as.integer(breast$tumor_size_quant)
+
+breast$inv_nodes_quant <- factor(breast$inv_nodes, levels(breast$inv_nodes)[c(1, 5, 6, 7, 2, 3, 4)])
+
+breast$inv_nodes_quant <- as.integer(breast$inv_nodes_quant)
+```
+    
+```{r}
+# b
+set.seed(303)
+n <- nrow(breast)
+train <- sample(n, floor(0.7 * n))
+validation <- setdiff(1:n,train)
+```
+
+```{r}
+# c
+breast.tsk <- makeClassifTask(id = "Breast Cancer Recurrence", data = breast[, c("recurrence", "deg_malig", "inv_nodes_quant")], target = "recurrence")
+```
+
+```{r}
+# d
+breast.lrn <- makeLearner("classif.knn", k = 1, fix.factors.prediction = T)
+```
+
+```{r}
+## e
+breast_1NN <- train(breast.lrn, breast.tsk, subset = train)
+```
+
+```{r}
+## f
+breast_predict <- predict(breast_1NN, task = breast.tsk, subset = validation)
+calculateConfusionMatrix(breast_predict)
+performance(breast_predict, measures = list(mmce, acc))
+```
+
+```{r}
+## g
+Result <- c()
+breast.tsk <- makeClassifTask(id = "Breast Cancer Recurrence", data = breast[,c("recurrence", "deg_malig", "inv_nodes_quant")], target = "recurrence")
+for(i in 1:30){
+  breast.lrn <- makeLearner("classif.knn", k = i, fix.factors.prediction = T)
+  breast_kNN <- train(breast.lrn, breast.tsk, subset = train)
+  breast_predict <- predict(breast_kNN, task = breast.tsk, subset = validation)
+  perf <- performance(breast_predict, measures = list(mmce, acc))
+  Result <- rbind(Result, perf)
+}
+```
+```{r}
+# h
+plot(Result[,1], type = "b", xlab = "k", ylab = "MMCE", xaxt = "n", main = "Single Split")
+axis(1, 1:30 ,las = 1)
+```
+
+Actually, it doesn't matter which model I choose from model 2,12,13,23,24,25,26 and 27 since they all give the least misclassification error. But if I must choose, I would choose the model of k = 12 since it gives moderate bias and variance. For too simple model like k = 27, it will have large bias. But for model like k = 2, it will have large variance. So I will select model k = 12 with no too high bias and variance. 
+
+```{r}
+## i
+set.seed(303)
+Result_mmce <- mat.or.vec(30,5)
+for(i in 1:5){
+  train_i <- sample(n, floor(0.7 * n))
+  validation_i <- setdiff(1:n,train)
+  breast.tsk <- makeClassifTask(id = "Breast Cancer Recurrence", data = breast[,c("recurrence", "deg_malig", "inv_nodes_quant")], target = "recurrence")
+  for(j in 1:30){
+    breast.lrn <- makeLearner("classif.knn", k = i, fix.factors.prediction = T)
+    breast_kNN <- train(breast.lrn, breast.tsk, subset = train_i)
+    breast_predict <- predict(breast_kNN, task = breast.tsk, subset = validation_i)
+    print(calculateConfusionMatrix(breast_predict))
+    perf <- performance(breast_predict, measures = list(mmce, acc))
+    print(perf)
+    Result_mmce[j,i] <- perf[1]
+  } 
+}
+
+plot(Result[,1], type = "b", xlab = "k", ylab = "MMCE", xaxt = "n", ylim = c(0.22, 0.3), main = "Comparsion of different splits")
+for(i in 1:5){
+  par(new = T)
+  plot(Result_mmce[,i], type = "b", col = i, pch = i+1, xlab = "", ylab = "", xaxt = "n", ylim = c(0.22, 0.3), yaxt = "n")
+}
+axis(1, 1:30 ,las = 1)
+legend("bottom", legend = c("ref", 1:5), pch = c(1:6), col = c("black", 1:5), bg ="white", horiz = T)
+```
+
+I can't choose the same value of k for eahc of the 5 splits. According to the graph, we can say that it will not be stable of using a single training/validation split to perform model selection, which means there will be large variability.
+
+```{r}
+# j
+breast.lrn <- makeLearner("classif.knn", k = 1, fix.factors.prediction = T)
+cv_val <- crossval(breast.lrn, breast.tsk, iters = 10L, stratify = T, measures = mmce, show.info = F)
+cv_val
+```
+
+```{r}
+# k
+Result_cv <- numeric()
+for(i in 1:30){
+  breast.lrn <- makeLearner("classif.knn", k = i, fix.factors.prediction = T)
+  cv_val <- crossval(breast.lrn, breast.tsk, iters = 10L, stratify = T, measures = mmce, show.info = F)
+  Result_cv[i] <- cv_val$aggr
+}
+```
+
+```{r}
+# l
+plot(Result_cv, type = "b", xlab = "k", ylab = "MMCE", xaxt = "n", main = "10-fold Cross Validation")
+axis(1, 1:30 ,las = 1)
+```
+
+I will choose k = 9 model by examining the cross-validaition error. I choose different model I selected in h. 
+
+```{r}
+Result_cv[9]
+Result[12]
+```
+
+I prefer k = 9 model since it has a MMCE with 0.22, lower than k = 12 model with a MMCE of 0.26. In other words, 10=fold cross-validation has a lower variance than single split model. At this point of view, I will also choose k = 9 model.
+
+```{r}
+# m
+set.seed(303)
+Result_rcv <- mat.or.vec(5, 30)
+
+for(i in 1:5){
+  for(j in 1:30){
+    breast.lrn <- makeLearner("classif.knn", k = i, fix.factors.prediction = T)
+    cv_val <- crossval(breast.lrn, breast.tsk, iters = 10L, stratify = T, measures = mmce)
+    Result_rcv[i,j] <- cv_val$aggr
+  }
+}
+
+plot(Result_cv, type = "b", xlab = "k", ylab = "MMCE", xaxt = "n", ylim = c(0.22, 0.27), xlim = c(0, 35), main = "Comparison of 10-fold Cross Validation")
+for(i in 1:5){
+  par(new = T)
+  plot(Result_rcv[i,], type = "b", col = i, pch = i+1, xlab = "", ylab = "", xaxt = "n", ylim = c(0.22, 0.27), xlim = c(0, 35), yaxt = "n")
+}
+axis(1, 1:35 ,las = 1)
+legend("right", legend = c("ref", 1:5), pch = c(1:6), col = c("black", 1:5), bg ="white")
+```
+
+
+I can't choose the same value of K for each of the 5 splits. Although there is still variability in CV curves, it is less than the variablity of single training/validation splits in i.
+
+## Exercise 2
+
+```{r}
+# a
+set.seed(303)
+
+breast.tsk <- makeClassifTask(id = "Breast Cancer Recurrence", data = breast[, c("recurrence", "deg_malig", "inv_nodes_quant")], target = "recurrence")
+
+Kvals <- makeParamSet(makeDiscreteParam("k", values = 1:30))
+
+breast_holdout <- makeResampleDesc("Holdout", stratify=TRUE)
+
+breast_LOO <- makeResampleDesc("LOO")
+
+breast_10CV <- makeResampleDesc("CV", iters = 10L, stratify=TRUE)
+
+breast_RepCV <- makeResampleDesc("RepCV", reps=5L, folds = 10L, stratify=TRUE)
+
+ctrl <- makeTuneControlGrid()
+
+breast_holdout_tune <- tuneParams("classif.knn", task = breast.tsk, resampling = breast_holdout, par.set = Kvals, control = ctrl, measures=mmce)
+Result_holdout <- generateHyperParsEffectData(breast_holdout_tune)$data
+
+breast_LOO_tune <- tuneParams("classif.knn", task = breast.tsk, resampling = breast_LOO, par.set = Kvals, control = ctrl, measures=mmce)
+Result_LOO <- generateHyperParsEffectData(breast_LOO_tune)$data
+
+breast_10CV_tune <- tuneParams("classif.knn", task = breast.tsk, resampling = breast_10CV, par.set = Kvals, control = ctrl, measures=mmce)
+Result_10CV <- generateHyperParsEffectData(breast_10CV_tune)$data
+
+breast_RepCV_tune <- tuneParams("classif.knn", task = breast.tsk, resampling = breast_RepCV, par.set = Kvals, control = ctrl, measures=mmce)
+Result_RepCV <- generateHyperParsEffectData(breast_RepCV_tune)$data
+```
+
+The single split choose k = 1, but cross-validation, LOO and repeated cross-validation choose the same k = 5. The tuning times are quite different for these four method. The single split only tuned for 1 times, cross-validation tuned for 10 times, while LOO tuned for 277 times, repeated cross-validation tuned for $5 * 10 = 50$ times. 
+
+```{r}
+# b
+plot(Result_holdout$mmce.test.mean, type = "b", xlab = "k", ylab = "MMCE", xaxt = "n", ylim = c(0.22, 0.3), pch = 1, col = 1, main = "Comparison of Different CV Method")
+
+par(new = T)
+plot(Result_LOO$mmce.test.mean, type = "b", xaxt = "n", yaxt = "n", xlab = "", ylab = "", ylim = c(0.22, 0.3), pch = 2, col = 2)
+
+par(new = T)
+plot(Result_10CV$mmce.test.mean, type = "b", xaxt = "n", yaxt = "n", ylim = c(0.22, 0.3), xlab = "", ylab = "",pch = 3, col = 3)
+
+par(new = T)
+plot(Result_RepCV$mmce.test.mean, type = "b", xaxt = "n", yaxt = "n", ylim = c(0.22, 0.3),xlab = "", ylab = "",pch = 4, col = 4)
+
+axis(1, 1:35 ,las = 1)
+legend("top", legend = c("Single", "LOO", "10CV", "RepCV"), pch = c(1:4), col = c(1:4), bg ="white", horiz = T)
+```
+
+```{r}
+# c
+breast_holdout_tuned <- setHyperPars(makeLearner("classif.knn"), par.vals = breast_holdout_tune$x)
+
+breast_LOO_tuned <- setHyperPars(makeLearner("classif.knn"), par.vals = breast_LOO_tune$x)
+
+breast_10CV_tuned <- setHyperPars(makeLearner("classif.knn"), par.vals = breast_10CV_tune$x)
+
+breast_RepCV_tuned <- setHyperPars(makeLearner("classif.knn"), par.vals = breast_RepCV_tune$x)
+```
+
+```{r}
+# d
+set.seed(303)
+Result_holdout_r <- mat.or.vec(0,30)
+Result_LOO_r <- mat.or.vec(0,30)
+Result_10CV_r <- mat.or.vec(0,30)
+Result_RepCV_r <- mat.or.vec(0,30)
+
+for(i in 1:5){
+  breast_holdout_tune <- tuneParams("classif.knn", task = breast.tsk, resampling = breast_holdout, par.set = Kvals, control = ctrl, measures=mmce)
+  Result_holdout <- generateHyperParsEffectData(breast_holdout_tune)$data
+  Result_holdout_r <- rbind(Result_holdout_r, Result_holdout$mmce.test.mean)
+
+  breast_LOO_tune <- tuneParams("classif.knn", task = breast.tsk, resampling = breast_LOO, par.set = Kvals, control = ctrl, measures=mmce)
+  Result_LOO <- generateHyperParsEffectData(breast_LOO_tune)$data
+  Result_LOO_r <- rbind(Result_LOO_r, Result_LOO$mmce.test.mean)
+  
+  breast_10CV_tune <- tuneParams("classif.knn", task = breast.tsk, resampling = breast_10CV, par.set = Kvals, control = ctrl, measures=mmce)
+  Result_10CV <- generateHyperParsEffectData(breast_10CV_tune)$data
+  Result_10CV_r <- rbind(Result_10CV_r, Result_10CV$mmce.test.mean)
+  
+  breast_RepCV_tune <- tuneParams("classif.knn", task = breast.tsk, resampling = breast_RepCV, par.set = Kvals, control = ctrl, measures=mmce)
+  Result_RepCV <- generateHyperParsEffectData(breast_RepCV_tune)$data
+  Result_RepCV_r <- rbind(Result_RepCV_r, Result_RepCV$mmce.test.mean)
+}
+
+par(mfrow = c(2, 2))
+
+for(i in 1:5){
+  plot(Result_holdout_r[i,], type = "b", col = i, pch = i, xlab = "k", ylab = "MMCE", xaxt = "n", ylim = c(0.15, 0.4), main = "Comparision of Single Split")
+  par(new = T)
+}
+axis(1, 1:30 ,las = 1)
+legend("top", legend = c(1:5), pch = c(1:5), col = c(1:5), horiz = T, bty = "n")
+
+for(i in 1:5){
+  plot(Result_LOO_r[i,], type = "b", col = i, pch = i, xlab = "k", ylab = "MMCE", xaxt = "n", ylim = c(0.15, 0.4), main = "Comparision of LOO")
+  par(new = T)
+}
+axis(1, 1:30 ,las = 1)
+legend("top", legend = c(1:5), pch = c(1:5), col = c(1:5), horiz = T, bty = "n")
+
+for(i in 1:5){
+  plot(Result_10CV_r[i,], type = "b", col = i, pch = i, xlab = "k", ylab = "MMCE", xaxt = "n", ylim = c(0.15, 0.4), main = "Comparision of 10CV")
+  par(new = T)
+}
+axis(1, 1:30 ,las = 1)
+legend("top", legend = c(1:5), pch = c(1:5), col = c(1:5), horiz = T, bty = "n")
+
+for(i in 1:5){
+  plot(Result_RepCV_r[i,], type = "b", col = i, pch = i, xlab = "k", ylab = "MMCE", xaxt = "n", ylim = c(0.15, 0.4), main = "Comparision of RepCV")
+  par(new = T)
+}
+axis(1, 1:30 ,las = 1)
+legend("top", legend = c(1:5), pch = c(1:5), col = c(1:5), horiz = T, bty = "n")
+```
+
+The single split model has the largest variability. The 10-fold cross-validation model has the second largest variability. The LOO cross-validation model has the second least variability. The repeated 10-fold cross-validation model has the least variability. This is because the repeated 10-fold model minimize the error of randomization when the dataset is not big in these 4 models. LOO method fit the model on almost all train data, the variance of train set will be small, but it examines the effect of the model with only one single observation, which means it will have more variance in test set than epeated 10-fold model. Moreover, for standard 10-fold cv model, it can reduce some sort of error of randomization, but it will definitely have larger variance than repeated 10-fold model and LOO model since it repeats less timesand decrease less error of randomization. And for the same reason, single split model will have larger variance than LOO, 10-fold cv model and repeated 10-fold cv model since it only fit for 1 time.
